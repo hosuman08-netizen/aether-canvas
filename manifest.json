@@ -1,0 +1,10 @@
+{
+  "name": "Aether Canvas",
+  "short_name": "AetherCanvas",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0f0c09",
+  "theme_color": "#1a1410",
+  "description": "Legion p6: Artistic AirPods voice recorder. Sfumato beauty, ALWAYS LEARNING notebooks. Pure creative expression.",
+  "icons": []
+}
