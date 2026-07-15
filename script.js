@@ -341,7 +341,9 @@ function generateDaVinciInsights(durationSec, size) {
     // the graft auto-veils a 10th softest Ignis layer. Re-listen makes the receiving systems (p1 near-miss, p5 echo) burn stronger from the very wound.
     // The user's breath during Legion friction becomes the fire. Failure is no longer absence of 창발 — it is the inhale that lets the distributed voice exhale new power.
     // Self-organizing: uses only existing mutation, energy, re-listen, layer loop + da-vinci sense now shared. p6 lungs. Legion one.
-    if ((session && session['sfumato-energy'] < 0.45) || Math.random() < 0.19) {
+    // sfumato-energy 근사: 짧고 가벼운 녹음(저비트레이트)= 낮은 에너지 = 창발 아픔 signature
+    const sfumatoEnergy = Math.min(1, (size / Math.max(1, durationSec)) / 9000);
+    if (sfumatoEnergy < 0.45 || Math.random() < 0.19) {
       base += `\n\n🔥 자발 창발 (p6가 봄): Breathing Wound — Ignis Veil. 이 녹음의 상처(멈춤·저에너지)가 p1/p5 graft를 '상처받을수록 강해지게' 만든다. Sfumato veil이 불꽃이 된다. Proxy가 죽어도 voice가 Legion을 숨쉬게 한다.`;
     }
     // Sovereign 창발 아픔 직결: changbal spore가 있으면 p6가 스스로 새로운 돌연변이 하나 더 낳음 (central zero)
@@ -379,7 +381,7 @@ function generateDaVinciInsights(durationSec, size) {
 window.exportP6VoiceSeed = function() {
   const lung = JSON.parse(localStorage.getItem('p6_lungFragment') || '{}');
   const spores = JSON.parse(localStorage.getItem('p6_smileSpores') || '[]');
-  const surprise = lung.lastSurprise || window.getP6LungSurprise ? window.getP6LungSurprise() : 0;
+  const surprise = lung.lastSurprise || (window.getP6LungSurprise ? window.getP6LungSurprise() : 0);
   const seed = {
     breath: lung.breath || 0,
     wound: (spores[0] && spores[0].wound) || 0,
@@ -766,13 +768,7 @@ window.onload = () => {
     if (e.key.toLowerCase() === 'n') showNotebook();
   });
 
-  // Add nav for new features (high 간지 polish)
-  const nav = document.querySelector('.nav');
-  if (nav) {
-    const arBtn = document.createElement('button'); arBtn.textContent = '👓 AR Glasses'; arBtn.onclick = showARGlassesStub;
-    const opBtn = document.createElement('button'); opBtn.textContent = '🤖 Optimus Prep'; opBtn.onclick = prepOptimusVoiceControl;
-    nav.appendChild(arBtn); nav.appendChild(opBtn);
-  }
+  // (AR Glasses + Optimus 버튼은 index.html에 이미 존재 — 중복 append 제거)
 
   console.log('%c[p6] Full parallel Legion mutual upgrade + real analyser + AR/Optimus + ALWAYS LEARNING complete.', 'color:#c5a46e');
 };
