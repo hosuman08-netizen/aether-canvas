@@ -14,6 +14,49 @@ let ampAccum = 0, ampSamples = 0, ampPeak = 0; // real energy stats for the sess
 let currentSession = null;
 let sessions = JSON.parse(localStorage.getItem('p6_sessions') || '[]');
 
+// === Persistent audio store (IndexedDB) ===
+// localStorage blob URLs die on reload, which silently broke Re-listen for
+// saved sessions. Store the actual audio blob keyed by session id so re-listen
+// truly works after refresh — the core "save & come back to it" promise.
+let _p6db = null;
+function openAudioDB() {
+  return new Promise((resolve) => {
+    if (_p6db) return resolve(_p6db);
+    if (!window.indexedDB) return resolve(null);
+    try {
+      const req = indexedDB.open('p6_audio', 1);
+      req.onupgradeneeded = e => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains('clips')) db.createObjectStore('clips');
+      };
+      req.onsuccess = e => { _p6db = e.target.result; resolve(_p6db); };
+      req.onerror = () => resolve(null);
+    } catch(e) { resolve(null); }
+  });
+}
+async function saveAudioBlob(id, blob) {
+  const db = await openAudioDB(); if (!db) return false;
+  return new Promise(res => {
+    try {
+      const tx = db.transaction('clips', 'readwrite');
+      tx.objectStore('clips').put(blob, id);
+      tx.oncomplete = () => res(true);
+      tx.onerror = () => res(false);
+    } catch(e) { res(false); }
+  });
+}
+async function loadAudioBlob(id) {
+  const db = await openAudioDB(); if (!db) return null;
+  return new Promise(res => {
+    try {
+      const tx = db.transaction('clips', 'readonly');
+      const r = tx.objectStore('clips').get(id);
+      r.onsuccess = () => res(r.result || null);
+      r.onerror = () => res(null);
+    } catch(e) { res(null); }
+  });
+}
+
 function initCanvas() {
   canvas = document.getElementById('wave-canvas');
   ctx = canvas.getContext('2d');
@@ -221,8 +264,15 @@ function setupAnalyser(streamOrNode, opts = {}) {
       source = audioContext.createMediaStreamSource(streamOrNode);
       source.connect(analyser);
     } else {
-      // HTMLMediaElement (playback): tap the element and still route to speakers.
-      source = audioContext.createMediaElementSource(streamOrNode);
+      // HTMLMediaElement (playback): createMediaElementSource may only be called
+      // once per element, so cache the node on the element and reuse it.
+      if (streamOrNode._p6Source) {
+        source = streamOrNode._p6Source;
+      } else {
+        source = audioContext.createMediaElementSource(streamOrNode);
+        streamOrNode._p6Source = source;
+      }
+      try { source.disconnect(); } catch(e) {}
       source.connect(analyser);
       if (opts.toDestination !== false) analyser.connect(audioContext.destination);
     }
@@ -287,10 +337,20 @@ async function startRecording() {
 
       const playbackDiv = document.getElementById('playback');
       playbackDiv.innerHTML = '';
+
+      // Play + live-visualize the recording: route the <audio> element through a
+      // fresh AnalyserNode so the same real oscilloscope animates to playback.
       const playBtn = document.createElement('button');
       playBtn.textContent = '▶ Play Artistic Capture';
-      playBtn.onclick = () => audio.play();
+      playBtn.onclick = () => playWithVisualizer(audio, playBtn);
       playbackDiv.appendChild(playBtn);
+
+      // Real file save: download the actual captured audio to disk (.webm).
+      const dlBtn = document.createElement('button');
+      dlBtn.textContent = '⬇ Save Recording';
+      dlBtn.style.marginLeft = '8px';
+      dlBtn.onclick = () => downloadRecording(audioBlob);
+      playbackDiv.appendChild(dlBtn);
 
       const duration = Math.floor((Date.now() - startTime) / 1000);
       // Real measured energy: average RMS loudness over the whole take (0..1).
@@ -317,7 +377,12 @@ async function startRecording() {
       }, 120);
 
       stream.getTracks().forEach(t => t.stop());
-      if (audioContext) audioContext.close();
+      // Keep the AudioContext alive (suspended) so playback can reuse it and the
+      // cached MediaElementSource nodes stay valid. Disconnect the mic source.
+      if (source) { try { source.disconnect(); } catch(e) {} }
+      if (audioContext && audioContext.state !== 'closed') {
+        try { audioContext.suspend(); } catch(e) {}
+      }
     };
 
     mediaRecorder.start();
@@ -370,6 +435,63 @@ function stopRecording() {
     } catch(e){}
     setTimeout(() => { if (ctx) drawSfumatoBackground(); }, 500);
     setTimeout(drawRealP6LungEye, 280); // birth polish
+  }
+}
+
+// Play an <audio> capture while animating the REAL oscilloscope from the
+// played-back signal (same analyser path used for live recording). This makes
+// playback visibly "the same voice" — the trace follows the actual audio.
+let playbackAudioEl = null;
+function playWithVisualizer(audio, btn) {
+  if (isRecording) return; // never fight the live recording loop
+  // If this element is already playing, toggle pause.
+  if (playbackAudioEl === audio && !audio.paused) {
+    audio.pause();
+    if (btn) btn.textContent = '▶ Play Artistic Capture';
+    return;
+  }
+  playbackAudioEl = audio;
+  const ok = setupAnalyser(audio, { toDestination: true }); // real analyser on playback
+  if (btn) btn.textContent = '⏸ Pause';
+
+  const loop = () => {
+    if (!playbackAudioEl || playbackAudioEl.paused || playbackAudioEl.ended) return;
+    const frame = ok ? getAnalyserFrame() : null;
+    const amp = ok ? getLiveAmplitude() : 0.3;
+    drawSfumatoWaveform(amp, Date.now() * 0.06, frame && frame.freq, frame && frame.time);
+    drawRealP6LungEye(amp);
+    updateEnergyReadout(amp);
+    animationFrame = requestAnimationFrame(loop);
+  };
+  const reset = () => {
+    if (btn) btn.textContent = '▶ Play Artistic Capture';
+    cancelAnimationFrame(animationFrame);
+    const enEl = document.getElementById('energy'); if (enEl) enEl.textContent = '--';
+    setTimeout(() => { if (ctx) drawSfumatoBackground(); }, 400);
+  };
+  audio.onended = reset;
+  audio.onpause = () => { if (btn && audio.ended === false) btn.textContent = '▶ Play Artistic Capture'; };
+  audio.play().then(() => loop()).catch(e => { console.log('Playback blocked:', e.message); reset(); });
+}
+
+// Real download of the captured audio (not a fake alert). Saves the exact blob
+// that was recorded, with a dated filename.
+function downloadRecording(blob, name) {
+  try {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    a.href = url;
+    a.download = name || `aether-capture-${stamp}.webm`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    const st = document.getElementById('status');
+    if (st) st.textContent = 'Recording saved to your device (.webm).';
+  } catch(e) {
+    const st = document.getElementById('status');
+    if (st) st.textContent = 'Save failed: ' + e.message;
   }
 }
 
@@ -480,7 +602,14 @@ function saveToNotebook() {
   // ALWAYS LEARNING: capture user reflection immediately
   const learn = prompt('What did you observe/learn this session? (Da Vinci notebook — new eyes)', '');
   if (learn) currentSession.learnings = (currentSession.learnings || '') + '\n• ' + learn;
-  sessions.unshift(currentSession);
+  // Persist the real audio blob so Re-listen works after a page reload.
+  if (currentSession.blob) {
+    saveAudioBlob(currentSession.id, currentSession.blob);
+    currentSession.hasAudio = true;
+  }
+  // Blob isn't JSON-serializable — strip it before storing session metadata.
+  const { blob, ...persistable } = currentSession;
+  sessions.unshift(persistable);
   if (sessions.length > 42) sessions.length = 42;
   localStorage.setItem('p6_sessions', JSON.stringify(sessions));
   updateStreak();
@@ -569,11 +698,25 @@ function updateStreak() {
   }
 }
 
-function reListenAndLearn(id) {
+async function reListenAndLearn(id) {
   const s = sessions.find(x => x.id === id);
-  if (!s || !s.url) return;
-  const a = new Audio(s.url);
-  a.play();
+  if (!s) return;
+  // Rehydrate audio: in-session blob URLs die on reload, so pull the persisted
+  // blob from IndexedDB and mint a fresh URL. Then play WITH the visualizer.
+  let url = s.url;
+  let playable = false;
+  try {
+    const blob = await loadAudioBlob(id);
+    if (blob) { url = URL.createObjectURL(blob); playable = true; }
+    else if (s.url) { playable = true; } // still-live in-session URL
+  } catch(e) {}
+  if (playable && url) {
+    const a = new Audio(url);
+    playWithVisualizer(a);
+  } else {
+    const st = document.getElementById('status');
+    if (st) st.textContent = 'Audio for this session is no longer available (recorded before persistence).';
+  }
   // ALWAYS LEARNING: evolve insight on re-listen (time + memory delta)
   const days = Math.floor((Date.now() - new Date(s.timestamp)) / 864e5) || 1;
   const evolved = `\n\n[Re-listen +${days}d] New sfumato revealed: ${['silence now sings','cadence shifted','emotion anatomy clearer'][Math.floor(Math.random()*3)]}. What new discovery?`;
@@ -642,10 +785,14 @@ function showFOMO() {
 }
 
 function shareArtistic() {
-  // FOMO Masterpiece: scarcity framing
-  const sd = JSON.parse(localStorage.getItem('p6_streak') || '{}');
-  alert(`Masterpiece #${(sd.streak||1)*7+3} exported as sfumato limited (1/100 today). Your voice as Da Vinci art. Legion share ready.`);
-  // TODO: call image_gen for actual visual export + TG/X
+  // Real export: save the actual recording to disk. If none is loaded, tell the
+  // user honestly rather than faking a "masterpiece #".
+  if (currentSession && currentSession.blob) {
+    downloadRecording(currentSession.blob);
+    return;
+  }
+  const st = document.getElementById('status');
+  if (st) st.textContent = 'Record something first, then Export saves your capture to disk.';
 }
 
 function addAnatomyGestures() {
