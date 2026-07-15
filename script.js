@@ -9,7 +9,8 @@ let startTime = 0;
 let timerInterval;
 let canvas, ctx;
 let animationFrame;
-let audioContext, analyser, source, dataArray;
+let audioContext, analyser, source, dataArray, timeArray;
+let ampAccum = 0, ampSamples = 0, ampPeak = 0; // real energy stats for the session
 let currentSession = null;
 let sessions = JSON.parse(localStorage.getItem('p6_sessions') || '[]');
 
@@ -31,7 +32,7 @@ function drawSfumatoBackground() {
   }
 }
 
-function drawSfumatoWaveform(amplitude, time, freqData = null) {
+function drawSfumatoWaveform(amplitude, time, freqData = null, timeData = null) {
   if (!ctx || !canvas) return;
   ctx.fillStyle = 'rgba(10, 8, 6, 0.38)';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -39,6 +40,28 @@ function drawSfumatoWaveform(amplitude, time, freqData = null) {
   const centerY = canvas.height / 2;
   const width = canvas.width;
   const golden = 0.618; // Vitruvian / Da Vinci proportion
+
+  // === REAL oscilloscope trace: the actual time-domain waveform of the voice.
+  // This is the honest core — every wiggle is a genuine mic sample, not sine math.
+  // Drawn as the luminous protagonist line so the user literally sees their voice.
+  if (timeData && timeData.length) {
+    ctx.save();
+    ctx.shadowBlur = 14;
+    ctx.shadowColor = 'rgba(242, 225, 188, 0.5)';
+    ctx.strokeStyle = `rgba(245, 230, 195, ${0.5 + Math.min(0.4, amplitude * 0.6)})`;
+    ctx.lineWidth = 1.7;
+    ctx.beginPath();
+    const step = timeData.length / width;
+    const gain = 0.9; // vertical scale of the raw waveform
+    for (let x = 0; x < width; x++) {
+      const s = timeData[Math.floor(x * step)] || 128;
+      const v = (s - 128) / 128; // -1..1 real sample
+      const y = centerY + v * (centerY * gain);
+      if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
 
   // Sfumato: 9+ ultra soft smoke glaze layers (Da Vinci 20-30 glazes sim)
   const layers = 9;
@@ -179,23 +202,69 @@ function drawRealP6LungEye(amp) {
   }
 }
 
-function setupAnalyser(stream) {
+// Real Web Audio analysis: connect an AnalyserNode to the live mic (or an
+// <audio> element during playback) so both the amplitude and the drawn
+// waveform come from genuine sound, not synthetic sine math.
+function setupAnalyser(streamOrNode, opts = {}) {
   try {
-    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    if (!audioContext || audioContext.state === 'closed') {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioContext.state === 'suspended') audioContext.resume();
     analyser = audioContext.createAnalyser();
-    analyser.fftSize = 128;
-    source = audioContext.createMediaStreamSource(stream);
-    source.connect(analyser);
-    dataArray = new Uint8Array(analyser.frequencyBinCount);
-  } catch(e) { console.log('Analyser fallback'); }
+    // 1024 FFT → 512 freq bins + 1024 time-domain samples: enough resolution
+    // to draw a real oscilloscope trace of the voice, with light smoothing so
+    // the sfumato glazes stay soft rather than jittery.
+    analyser.fftSize = 1024;
+    analyser.smoothingTimeConstant = 0.72;
+    if (streamOrNode instanceof MediaStream) {
+      source = audioContext.createMediaStreamSource(streamOrNode);
+      source.connect(analyser);
+    } else {
+      // HTMLMediaElement (playback): tap the element and still route to speakers.
+      source = audioContext.createMediaElementSource(streamOrNode);
+      source.connect(analyser);
+      if (opts.toDestination !== false) analyser.connect(audioContext.destination);
+    }
+    dataArray = new Uint8Array(analyser.frequencyBinCount); // frequency spectrum
+    timeArray = new Uint8Array(analyser.fftSize);           // time-domain waveform
+    return true;
+  } catch(e) { console.log('Analyser setup failed:', e.message); return false; }
 }
 
+// True loudness (RMS) from the time-domain samples. Centered at 128 (silence),
+// so we measure real deviation from the zero line — no random fallback while
+// a real analyser is live.
 function getLiveAmplitude() {
-  if (!analyser || !dataArray) return Math.random() * 0.6 + 0.3;
+  if (!analyser || !timeArray) return isRecording ? 0 : Math.random() * 0.3 + 0.1;
+  analyser.getByteTimeDomainData(timeArray);
+  let sumSq = 0;
+  for (let i = 0; i < timeArray.length; i++) {
+    const v = (timeArray[i] - 128) / 128; // -1..1
+    sumSq += v * v;
+  }
+  const rms = Math.sqrt(sumSq / timeArray.length); // 0..~1
+  return Math.min(1, rms * 3.2); // scale typical speech RMS into a full 0..1 range
+}
+
+// Snapshot the real waveform + spectrum for this frame (used by the visualizer).
+function getAnalyserFrame() {
+  if (!analyser || !timeArray || !dataArray) return null;
+  analyser.getByteTimeDomainData(timeArray);
   analyser.getByteFrequencyData(dataArray);
-  let sum = 0;
-  for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
-  return Math.min(1, (sum / dataArray.length / 128) * 1.4);
+  return { time: timeArray, freq: dataArray };
+}
+
+// Live loudness readout driven by real RMS amplitude (0..1). Fills the
+// previously-dead #energy element with a genuine dB-ish bar + percent.
+function updateEnergyReadout(amp) {
+  const el = document.getElementById('energy');
+  if (!el) return;
+  const pct = Math.round(amp * 100);
+  const bars = Math.max(0, Math.min(12, Math.round(amp * 12)));
+  const filled = '▮'.repeat(bars);
+  const empty = '▯'.repeat(12 - bars);
+  el.textContent = `${filled}${empty} ${pct}%`;
 }
 
 function updateTimer() {
@@ -224,12 +293,14 @@ async function startRecording() {
       playbackDiv.appendChild(playBtn);
 
       const duration = Math.floor((Date.now() - startTime) / 1000);
-      const insights = generateDaVinciInsights(duration, audioBlob.size);
+      // Real measured energy: average RMS loudness over the whole take (0..1).
+      const avgEnergy = ampSamples ? (ampAccum / ampSamples) : 0.4;
+      const insights = generateDaVinciInsights(duration, audioBlob.size, avgEnergy);
 
       document.getElementById('insights').innerHTML = insights;
       document.getElementById('result').classList.remove('hidden');
 
-      currentSession = { id: Date.now(), timestamp: new Date().toISOString(), duration, size: audioBlob.size, url: audioUrl, insights, 'sfumato-energy': Math.random()*0.5+0.5 };
+      currentSession = { id: Date.now(), timestamp: new Date().toISOString(), duration, size: audioBlob.size, url: audioUrl, insights, blob: audioBlob, 'sfumato-energy': Math.round(avgEnergy*1000)/1000, peakEnergy: Math.round(ampPeak*1000)/1000 };
       if (window.exportP6VoiceSeed) window.exportP6VoiceSeed(); // cross for p1-p5
 
       // p6 playable 연결: record 직후 Codex Graft 버튼 자동 노출 (self-discovered mechanic 즉시 체험)
@@ -252,6 +323,7 @@ async function startRecording() {
     mediaRecorder.start();
     isRecording = true;
     startTime = Date.now();
+    ampAccum = 0; ampSamples = 0; ampPeak = 0; // reset real energy stats
 
     document.getElementById('rec-btn').disabled = true;
     document.getElementById('stop-btn').disabled = false;
@@ -263,10 +335,12 @@ async function startRecording() {
     let t = 0;
     const animate = () => {
       if (!isRecording) return;
+      const frame = getAnalyserFrame(); // real waveform + spectrum this frame
       const amp = getLiveAmplitude();
-      const freq = dataArray ? [...dataArray] : null;
-      drawSfumatoWaveform(amp, t, freq);
+      ampAccum += amp; ampSamples++; if (amp > ampPeak) ampPeak = amp; // real energy stats
+      drawSfumatoWaveform(amp, t, frame && frame.freq, frame && frame.time);
       drawRealP6LungEye(amp); // real p6 lung integration
+      updateEnergyReadout(amp); // live loudness meter (real RMS)
       t += 1.2;
       animationFrame = requestAnimationFrame(animate);
     };
@@ -285,6 +359,7 @@ function stopRecording() {
     cancelAnimationFrame(animationFrame);
     document.getElementById('rec-btn').disabled = false;
     document.getElementById('stop-btn').disabled = true;
+    const enEl = document.getElementById('energy'); if (enEl) enEl.textContent = '--';
     document.getElementById('status').textContent = 'Observation captured. Reflect in Notebook.';
     // 창발 Lung Fragment status (daemon + loose obs feed)
     try {
@@ -298,9 +373,14 @@ function stopRecording() {
   }
 }
 
-function generateDaVinciInsights(durationSec, size) {
+function generateDaVinciInsights(durationSec, size, avgEnergy = null) {
   const mins = (durationSec / 60).toFixed(1);
-  const energy = ((size / 12000) % 8 + 2.5).toFixed(1);
+  // Real measured loudness (0..1) → a 0..10 expressive-energy figure the user
+  // can actually feel matches how loud/soft they spoke. Falls back to size only
+  // if no live measurement was captured.
+  const energy = (avgEnergy != null
+    ? (avgEnergy * 10)
+    : ((size / 12000) % 8 + 2.5)).toFixed(1);
   const quality = durationSec > 50 ? 'profound sfumato resonance' : 'clear Vitruvian form';
 
   const obs = [
