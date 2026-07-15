@@ -56,28 +56,71 @@ h1 {
   letter-spacing: 0.2px;
 }
 
-.nav button {
-  background: var(--soft);
-  color: var(--text);
-  border: 1px solid #55493a;
-  padding: 7px 14px;
-  margin: calc(var(--grid) * 0.5);
-  border-radius: 5px;
-  cursor: pointer;
-  transition: background 160ms ease, color 160ms ease, border-color 160ms;
-  font-size: 0.86rem;
-  font-weight: 500;
+/* nav 위계: 주인공(Record) 1 + 조용한 보조 4 */
+.nav-primary {
+  display: flex;
+  gap: var(--grid);
+  justify-content: center;
+  margin-bottom: calc(var(--grid) * 1.5);
 }
 
-.nav button:hover {
+/* 주인공 버튼 — 유일한 gold 강조(10%) */
+.btn-hero {
   background: var(--gold);
   color: #0f0c09;
-  border-color: var(--gold);
+  border: none;
+  padding: 11px 26px;
+  border-radius: 7px;
+  font-size: 0.98rem;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  box-shadow: 0 2px 16px rgba(197,164,110,0.22);
+  transition: transform 160ms cubic-bezier(0.22,1,0.36,1), box-shadow 160ms ease, opacity 160ms;
 }
+.btn-hero:hover { transform: translateY(-1px); box-shadow: 0 4px 22px rgba(197,164,110,0.34); }
+.btn-hero:active { transform: translateY(0.5px); }
 
-.nav button:disabled {
-  opacity: 0.38;
-  cursor: not-allowed;
+/* 보조 정지 버튼은 ghost — 주인공과 안 싸우게 */
+.btn-ghost {
+  background: transparent;
+  color: var(--gold);
+  border: 1px solid #55493a;
+  box-shadow: none;
+}
+.btn-ghost:hover { background: rgba(197,164,110,0.08); box-shadow: none; }
+
+.btn-hero:disabled { opacity: 0.32; cursor: not-allowed; transform: none; box-shadow: none; }
+
+/* 보조 네비 — 조용한 텍스트 칩(절제) */
+.nav-secondary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--grid) * 0.75);
+  justify-content: center;
+}
+.nav-secondary button {
+  background: transparent;
+  color: #8b7355;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  transition: color 160ms ease, background 160ms ease;
+}
+.nav-secondary button:hover { color: var(--gold); background: rgba(197,164,110,0.06); }
+
+/* 접근성: 키보드 포커스 링(Space가 코어 컨트롤) */
+button:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn-hero { transition: none; }
+  .btn-hero:hover { transform: none; }
 }
 
 .status {

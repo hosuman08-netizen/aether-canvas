@@ -746,7 +746,7 @@ window.onload = () => {
   initCanvas();
   addAnatomyGestures();
   enhanceFOMOMasterpieces();
-  document.getElementById('status').textContent = 'Aether Canvas p6 — Da Vinci Legion upgraded. Record beauty.';
+  document.getElementById('status').textContent = '준비 완료. 에어팟으로 말하세요 — 레오나르도처럼 관찰합니다.';
   // p3 cross awareness (Sovereign p1-p6)
   try {
     const exp = JSON.parse(localStorage.getItem('p3_aether_export')||'null');

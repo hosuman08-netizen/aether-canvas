@@ -13,19 +13,24 @@
   <div class="container">
     <!-- Renaissance + modern 간지: one protagonist (gold), 8px, sfumato restraint -->
     <header>
-      <div class="disclaimer">FICTIONAL ARTISTIC TOOL • PURE CREATIVE • Legion ALWAYS LEARNING • NO GAMBLING</div>
+      <div class="disclaimer">FICTIONAL ARTISTIC TOOL • PURE CREATIVE • NO GAMBLING</div>
       <h1>Aether Canvas</h1>
-      <p class="tagline">Voice as Art • Sfumato Glaze • Da Vinci Anatomy • FOMO Masterpieces</p>
-      <small style="opacity:0.6;letter-spacing:1px">p6 self-discovered: Sfumato Breath Vitruvian Codex (Saper Vedere)</small>
+      <p class="tagline">당신의 목소리를, 스푸마토 빛으로.</p>
+
+      <!-- 주인공 하나: Record. 나머지는 조용한 보조. -->
       <div class="nav">
-        <button onclick="startRecording()" id="rec-btn">🎙 Record (AirPods)</button>
-        <button onclick="stopRecording()" id="stop-btn" disabled>Stop</button>
-        <button onclick="showNotebook()">📓 Notebook (ALWAYS LEARNING)</button>
-        <button onclick="showFOMO()">🔥 Streak & Masterpieces</button>
-        <button onclick="showARGlassesStub()">👓 Glasses</button>
-        <button onclick="prepOptimusVoiceControl()">🤖 Optimus</button>
+        <div class="nav-primary">
+          <button onclick="startRecording()" id="rec-btn" class="btn-hero">🎙 녹음 시작</button>
+          <button onclick="stopRecording()" id="stop-btn" class="btn-hero btn-ghost" disabled>정지</button>
+        </div>
+        <div class="nav-secondary">
+          <button onclick="showNotebook()">노트북</button>
+          <button onclick="showFOMO()">스트릭</button>
+          <button onclick="showARGlassesStub()">AR 글래스</button>
+          <button onclick="prepOptimusVoiceControl()">옵티머스</button>
+        </div>
       </div>
-      <div id="status" class="status">Ready. Speak beauty. Capture like Leonardo observed.</div>
+      <div id="status" class="status">준비 완료. 에어팟으로 말하세요 — 레오나르도처럼 관찰합니다.</div>
     </header>
 
     <!-- Sfumato Waveform Canvas: soft, smoky, layered -->
