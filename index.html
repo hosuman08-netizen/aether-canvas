@@ -3,21 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Aether Canvas • Artistic AirPods Recorder</title>
-  <meta name="description" content="Legion p6: Artistic voice recording with AirPods. Beauty-first, user-centric expressive canvas. Sfumato-inspired soft UI. ALWAYS LEARNING notebook. Pure creative tool.">
+  <title>Aether Canvas • 음성 아트 레코더</title>
+  <meta name="description" content="목소리를 부드러운 스푸마토 빛의 파형으로 그려주는 음성 녹음 아트 앱. 이어폰으로 말하면 실시간 비주얼라이저가 반응하고, 노트북에 담아 다시 들으며 관찰합니다.">
   <link rel="stylesheet" href="style.css">
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#1a1410">
 </head>
 <body>
   <div class="container">
-    <!-- Renaissance + modern 간지: one protagonist (gold), 8px, sfumato restraint -->
     <header>
-      <div class="disclaimer">FICTIONAL ARTISTIC TOOL • PURE CREATIVE • NO GAMBLING</div>
+      <div class="disclaimer">가상의 아트 도구 • 순수 창작용 • 도박 요소 없음 • 18세 이상 권장</div>
       <h1>Aether Canvas</h1>
       <p class="tagline">당신의 목소리를, 스푸마토 빛으로.</p>
 
-      <!-- 주인공 하나: Record. 나머지는 조용한 보조. -->
+      <!-- 주인공 하나: 녹음. 나머지는 조용한 보조. -->
       <div class="nav">
         <div class="nav-primary">
           <button onclick="startRecording()" id="rec-btn" class="btn-hero">🎙 녹음 시작</button>
@@ -25,50 +24,48 @@
         </div>
         <div class="nav-secondary">
           <button onclick="showNotebook()">노트북</button>
-          <button onclick="showFOMO()">스트릭</button>
-          <button onclick="showARGlassesStub()">AR 글래스</button>
-          <button onclick="prepOptimusVoiceControl()">옵티머스</button>
         </div>
       </div>
-      <div id="status" class="status">준비 완료. 에어팟으로 말하세요 — 레오나르도처럼 관찰합니다.</div>
+      <div id="status" class="status">준비 완료. 이어폰으로 말해보세요.</div>
     </header>
 
-    <!-- Sfumato Waveform Canvas: soft, smoky, layered -->
+    <!-- 스푸마토 파형 캔버스: 부드럽고 은은한 다층 레이어 -->
     <div class="visualizer">
       <canvas id="wave-canvas" width="800" height="240"></canvas>
-      <div class="overlay-label">Live Sfumato • No hard edges</div>
+      <div class="overlay-label">Live Sfumato • 실시간 파형</div>
     </div>
 
-    <!-- Real p6 Lung Eye canvas (Da Vinci Saper Vedere) -->
+    <!-- 골든 아이 디테일 캔버스 -->
     <div style="text-align:center;margin:calc(var(--grid,8px)*0.5) 0;">
-      <canvas id="p6-lung-eye" width="220" height="68" style="background:#0a0806;border:1px solid #3a2f22;border-radius:5px"></canvas>
-      <div style="font-size:9px;opacity:0.55;letter-spacing:0.5px">p6 Lung Surprise Eye — real integration</div>
+      <canvas id="detail-eye" width="220" height="68" style="background:#0a0806;border:1px solid #3a2f22;border-radius:5px"></canvas>
+      <div style="font-size:9px;opacity:0.55;letter-spacing:0.5px">Golden Detail — 목소리의 미세한 반응</div>
     </div>
 
-    <!-- Controls: Anatomy-inspired precision + user-centric -->
+    <!-- 세션 정보 -->
     <div class="controls">
       <div class="info">
         <div>Session: <span id="duration">00:00</span></div>
         <div>Energy: <span id="energy">--</span></div>
-        <div>Gesture hint: Tap or speak naturally (AirPods precision)</div>
+        <div>Tip: 이어폰으로 자연스럽게 말해보세요</div>
       </div>
     </div>
 
-    <!-- Post-record artistic output -->
+    <!-- 녹음 후 결과 -->
     <div id="result" class="result hidden">
-      <h3>Observation Complete</h3>
+      <h3>관찰 완료</h3>
       <div id="playback"></div>
       <div id="insights" class="notebook-entry"></div>
-      <button onclick="saveToNotebook()">Save to Notebook (Learn)</button>
-      <button onclick="shareArtistic()">Export as Art (FOMO limited)</button>
+      <button onclick="saveToNotebook()">노트북에 저장</button>
+      <button onclick="shareArtistic()">파일로 내보내기</button>
     </div>
 
     <footer>
-      <small>Legion p6 • Da Vinci: Observe • Sfumato • Vitruvian proportion • ALWAYS LEARNING. Glasses AR + Optimus voice ready. <span style="opacity:0.5">∝ golden</span></small>
+      <small>Aether Canvas • 목소리를 관찰하고 기록하는 음성 아트 도구.<br>
+      <a href="https://hosuman08-netizen.github.io/legion-hub/" style="color:#8b7355;">← 다른 앱 더보기</a></small>
     </footer>
   </div>
 
-  <script src="lung-surprise-eye.js"></script>
+  <script src="golden-detail.js"></script>
   <script src="script.js"></script>
 </body>
 </html>

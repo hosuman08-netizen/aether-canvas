@@ -5,7 +5,7 @@
   --text: #f5f1e6;
   --accent: #8b6f47;
   --grid: 8px;
-} /* SENSE full: one protagonist gold + 60/30/10 + golden Vitruvian */
+} /* one protagonist gold + 60/30/10 + 8px grid */
 
 body {
   margin: 0;
@@ -19,7 +19,7 @@ body {
 }
 
 .container {
-  max-width: 618px; /* Vitruvian golden */
+  max-width: 618px; /* golden-ratio width */
   width: 100%;
 }
 
