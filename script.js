@@ -49,6 +49,8 @@ const E = {
   mip: null,            // {min:Float32Array,max:Float32Array,stride}
   t0: 0, t1: 1,         // 표시 구간 (초)
   sel: null,            // {a,b} 선택 구간 (초)
+  markers: [],          // [{t, label, kind}] 구간 마커 (초, 오름차순)
+  segments: [],         // 마지막 무음 감지가 찾은 말소리 구간 [{a,b}]
   dirty: false,         // 아직 라이브러리에 저장 안 됨
   specCache: null,      // {key, canvas}
   specTimer: 0,
@@ -213,7 +215,7 @@ function loadMeta() {
           peaks: Array.isArray(o.voiceprint) ? o.voiceprint : null,
           note: (o.learnings || '').trim(),
           fav: false, deleted: false, deletedAt: null, derivedFrom: null,
-          dbfsPeak: null, sampleRate: null
+          dbfsPeak: null, sampleRate: null, markers: []
         }));
         break;
       }
@@ -522,6 +524,188 @@ function peakDbOf(buffer) {
   const stride = Math.max(1, Math.floor(d.length / 400000)); // 아주 긴 파일은 표본화
   for (let i = 0; i < d.length; i += stride) { const a = Math.abs(d[i]); if (a > peak) peak = a; }
   return toDb(peak);
+}
+
+/* ═══════════════════ 6b. 무음 감지 (말소리 구간) ═══════════════════ */
+/* 결정적 DSP. 20ms 프레임 RMS 포락선을 구하고, 잡음 바닥(하위 분위수)에서
+   적응 임계값을 뽑은 뒤, 히스테리시스 상태기계로 말소리 구간을 나눈다.
+   임계값을 하드코딩하지 않아 조용한 방/시끄러운 방 모두에 스스로 맞춘다.
+   가짜·랜덤 없음 — 같은 오디오는 항상 같은 구간을 낸다. */
+function detectSpeechSegments(buffer, opts) {
+  opts = opts || {};
+  const sr = buffer.sampleRate;
+  const d = buffer.getChannelData(0);
+  const dur = buffer.duration;
+  const frame = Math.max(1, Math.round(sr * 0.02));   // 20ms 분석창
+  const hop = Math.max(1, Math.round(sr * 0.01));     // 10ms 이동
+  const nFrames = Math.max(1, Math.floor((d.length - frame) / hop) + 1);
+
+  const rmsDb = new Float32Array(nFrames);
+  for (let f = 0; f < nFrames; f++) {
+    const s = f * hop;
+    let sum = 0;
+    for (let i = 0; i < frame; i++) { const v = d[s + i] || 0; sum += v * v; }
+    const rms = Math.sqrt(sum / frame);
+    rmsDb[f] = rms > 0 ? 20 * Math.log10(rms) : -120;
+  }
+
+  // 적응 임계값: 잡음 바닥(하위 15% 분위수)보다 8 dB 위를 말소리로 본다.
+  const sorted = Array.prototype.slice.call(rmsDb).sort((a, b) => a - b);
+  const noiseFloor = sorted[Math.floor(sorted.length * 0.15)];
+  const peak = sorted[sorted.length - 1];
+  let thresh = clamp(noiseFloor + 8, -55, peak - 6);
+  const empty = { segments: [], threshold: thresh, noiseFloor, peak, totalSilence: dur };
+  // 신호와 잡음의 대비가 없으면(무음 파일 등) 나눌 것이 없다.
+  if (!(peak - noiseFloor > 6) || !isFinite(peak)) return empty;
+
+  const framesPerSec = sr / hop;
+  const minSpeechF = Math.max(1, Math.round((opts.minSpeech != null ? opts.minSpeech : 0.18) * framesPerSec));
+  const minSilenceF = Math.max(1, Math.round((opts.minSilence != null ? opts.minSilence : 0.30) * framesPerSec));
+
+  const runs = [];
+  let inSpeech = false, segStart = 0, silenceRun = 0;
+  for (let f = 0; f < nFrames; f++) {
+    const loud = rmsDb[f] >= thresh;
+    if (!inSpeech) {
+      if (loud) { inSpeech = true; segStart = f; silenceRun = 0; }
+    } else if (loud) {
+      silenceRun = 0;
+    } else {
+      silenceRun++;
+      if (silenceRun >= minSilenceF) {
+        const end = f - silenceRun + 1;
+        if (end - segStart >= minSpeechF) runs.push([segStart, end]);
+        inSpeech = false;
+      }
+    }
+  }
+  if (inSpeech && nFrames - segStart >= minSpeechF) runs.push([segStart, nFrames]);
+
+  const fToSec = f => clamp(f * hop / sr, 0, dur);
+  const segments = runs.map(r => ({ a: fToSec(r[0]), b: fToSec(Math.min(nFrames, r[1])) }));
+  let voiced = 0;
+  segments.forEach(s => { voiced += s.b - s.a; });
+  return { segments, threshold: thresh, noiseFloor, peak, totalSilence: Math.max(0, dur - voiced) };
+}
+
+/* ═══════════════════ 6c. 구간 마커 ═══════════════════ */
+/* 마커는 시간 위의 지점. 자동 감지가 말소리 시작마다 놓거나, M으로 직접 놓는다.
+   [ ] 로 이웃 마커로 이동. 마커는 클립 메타에 함께 저장되어 다시 열어도 남는다. */
+
+function sortMarkers() {
+  E.markers.sort((m, n) => m.t - n.t);
+}
+
+function addMarker(t, label, kind) {
+  if (!E.meta) return;
+  const dur = E.meta.duration || 0;
+  const time = clamp(t, 0, dur);
+  // 같은 지점(50ms 이내) 중복 방지
+  if (E.markers.some(m => Math.abs(m.t - time) < 0.05)) return;
+  E.markers.push({ t: time, label: label || ('마커 ' + (E.markers.length + 1)), kind: kind || 'manual' });
+  sortMarkers();
+  persistMarkersIfSaved();
+  updateMarkerUI();
+  redrawEditor();
+}
+
+function clearMarkers() {
+  E.markers = [];
+  E.segments = [];
+  persistMarkersIfSaved();
+  updateMarkerUI();
+  redrawEditor();
+}
+
+// 저장된(dirty 아님) 클립이면 마커 변경을 즉시 메타에 반영한다.
+function persistMarkersIfSaved() {
+  if (!E.meta) return;
+  E.meta.markers = E.markers.map(m => ({ t: m.t, label: m.label, kind: m.kind }));
+  if (!E.dirty) saveMeta();
+}
+
+function nearestMarkerIndex(t) {
+  let best = -1, bestD = Infinity;
+  for (let i = 0; i < E.markers.length; i++) {
+    const d = Math.abs(E.markers[i].t - t);
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  return best;
+}
+
+function gotoMarker(dir) {
+  if (!E.meta || !E.markers.length) return;
+  const now = currentPlayTime();
+  let target = -1;
+  if (dir > 0) {
+    for (let i = 0; i < E.markers.length; i++) { if (E.markers[i].t > now + 0.01) { target = i; break; } }
+    if (target < 0) target = E.markers.length - 1;
+  } else {
+    for (let i = E.markers.length - 1; i >= 0; i--) { if (E.markers[i].t < now - 0.01) { target = i; break; } }
+    if (target < 0) target = 0;
+  }
+  const m = E.markers[target];
+  P.pos = clamp(m.t, 0, E.meta.duration);
+  // 마커가 화면 밖이면 그 지점이 보이도록 뷰를 따라 옮긴다.
+  if (m.t < E.t0 || m.t > E.t1) {
+    const span = viewSpan();
+    setView(m.t - span * 0.35, m.t - span * 0.35 + span);
+  }
+  if (P.playing) playFrom(P.pos); else redrawEditor();
+  setMarkerRead(m.label + ' · ' + (target + 1) + '/' + E.markers.length);
+}
+
+function setMarkerRead(txt) {
+  const el = $('mk-read');
+  if (el) el.textContent = txt;
+}
+
+function updateMarkerUI() {
+  const has = E.markers.length > 0;
+  const nav = $('mk-nav'), trim = $('mk-trim'), clr = $('mk-clear');
+  if (nav) nav.classList.toggle('hidden', !has);
+  if (clr) clr.classList.toggle('hidden', !has);
+  if (trim) trim.classList.toggle('hidden', !E.segments.length);
+  if (has) setMarkerRead(E.markers.length + '개 마커');
+}
+
+function runSilenceDetect() {
+  if (!E.buffer) { toast('이 형식은 파형 분석을 할 수 없습니다.'); return; }
+  const res = detectSpeechSegments(E.buffer);
+  E.segments = res.segments;
+  // 이전 자동 마커만 걷어내고(직접 놓은 마커는 보존) 새로 놓는다.
+  E.markers = E.markers.filter(m => m.kind !== 'auto');
+  res.segments.forEach((s, i) => {
+    E.markers.push({ t: s.a, label: '구간 ' + (i + 1), kind: 'auto' });
+  });
+  sortMarkers();
+  persistMarkersIfSaved();
+  updateMarkerUI();
+  redrawEditor();
+  if (!res.segments.length) {
+    toast('말소리 구간을 찾지 못했습니다 (거의 무음이거나 균일한 소리)');
+  } else {
+    const sil = res.totalSilence;
+    toast(res.segments.length + '개 구간 감지 · 무음 ' + (sil >= 1 ? sil.toFixed(1) + '초' : Math.round(sil * 1000) + 'ms') +
+          ' · 기준 ' + Math.round(res.threshold) + ' dBFS');
+  }
+}
+
+// 앞뒤 무음을 뺀 말소리 전체 범위를 선택 구간으로 잡아준다(비파괴 — 자르기는 사용자가).
+function trimSilenceSelect() {
+  if (!E.buffer) return;
+  if (!E.segments.length) {
+    const res = detectSpeechSegments(E.buffer);
+    E.segments = res.segments;
+  }
+  if (!E.segments.length) { toast('다듬을 말소리 구간을 찾지 못했습니다.'); return; }
+  const pad = 0.06;
+  const a = clamp(E.segments[0].a - pad, 0, E.buffer.duration);
+  const b = clamp(E.segments[E.segments.length - 1].b + pad, 0, E.buffer.duration);
+  setSel(a, b);
+  const cut = E.buffer.duration - (b - a);
+  toast('앞뒤 무음 ' + (cut >= 0.1 ? cut.toFixed(1) + '초' : Math.round(cut * 1000) + 'ms') +
+        ' 제외 — "선택 구간만 새 녹음으로"로 저장하세요');
 }
 
 /* ═══════════════════ 7. 레벨 미터 (dBFS) ═══════════════════ */
@@ -876,7 +1060,8 @@ async function finishRecording() {
     fav: false, deleted: false, deletedAt: null,
     derivedFrom: null,
     dbfsPeak: isFinite(R.peakDb) ? Math.round(R.peakDb * 10) / 10 : null,
-    sampleRate: null
+    sampleRate: null,
+    markers: []
   };
 
   await openClip(meta, blob, true);
@@ -896,6 +1081,9 @@ async function openClip(meta, blob, isNew) {
   E.specCache = null;
   E.decodeFailed = false;
   E.dirty = !!isNew;
+  // 저장돼 있던 마커를 되살리고, 감지 결과는 새로 계산하도록 비운다.
+  E.markers = Array.isArray(meta.markers) ? meta.markers.map(m => ({ t: m.t, label: m.label, kind: m.kind })) : [];
+  E.segments = [];
 
   switchTab('edit');
   $('edit-empty').classList.add('hidden');
@@ -933,6 +1121,7 @@ async function openClip(meta, blob, isNew) {
   drawMinimap();
   redrawEditor();
   updateSelReadout();
+  updateMarkerUI();
 }
 
 // 목록에서 바로 구분되는 자동 제목. "무제목 1/2/3"은 3개만 쌓여도 무너진다.
@@ -1016,6 +1205,18 @@ function drawRuler() {
       if (x < 0 || x > W) continue;
       c.fillRect(Math.round(x), H - 4, 1, 4);
     }
+  }
+
+  // 마커 위치를 눈금 위에 삼각 표식으로 겹쳐 보여준다
+  if (E.markers.length) {
+    E.markers.forEach(m => {
+      const x = timeToX(m.t, W);
+      if (x < -1 || x > W + 1) return;
+      c.fillStyle = m.kind === 'auto' ? '#8a733a' : '#c5a46e';
+      c.beginPath();
+      c.moveTo(x - 3, 0); c.lineTo(x + 3, 0); c.lineTo(x, 5); c.closePath();
+      c.fill();
+    });
   }
 }
 
@@ -1106,6 +1307,25 @@ function ensureSpectrogram() {
 }
 
 function drawEditOverlay(c, W, H) {
+  // 구간 마커 — 얇은 세로선 + 위쪽 번호 깃발. 화면 밖은 건너뛴다.
+  if (E.markers.length) {
+    c.font = '9px system-ui, sans-serif';
+    c.textAlign = 'left';
+    c.textBaseline = 'alphabetic';
+    E.markers.forEach((m, i) => {
+      const x = timeToX(m.t, W);
+      if (x < -1 || x > W + 1) return;
+      const auto = m.kind === 'auto';
+      c.fillStyle = auto ? 'rgba(197,164,110,0.4)' : 'rgba(224,196,138,0.55)';
+      c.fillRect(Math.round(x), 12, 1, H - 12);
+      // 깃발
+      c.fillStyle = auto ? '#8a733a' : '#c5a46e';
+      c.fillRect(Math.round(x), 0, 15, 12);
+      c.fillStyle = '#0a0806';
+      c.fillText(String(i + 1), Math.round(x) + 3, 9);
+    });
+  }
+
   // 선택 구간
   if (E.sel) {
     const xa = timeToX(Math.min(E.sel.a, E.sel.b), W);
@@ -1232,6 +1452,15 @@ function drawMinimapViewport() {
   c.strokeStyle = '#c5a46e';
   c.lineWidth = 1.5;
   c.strokeRect(xa, 1, Math.max(2, xb - xa), H - 2);
+
+  // 마커 — 조감도 위에도 얇게 찍어 전체 분포를 보여준다
+  if (E.markers.length) {
+    E.markers.forEach(m => {
+      const mx = m.t / dur * W;
+      c.fillStyle = m.kind === 'auto' ? 'rgba(197,164,110,0.55)' : 'rgba(224,196,138,0.85)';
+      c.fillRect(mx, 0, 1, H);
+    });
+  }
 
   const px = currentPlayTime() / dur * W;
   c.fillStyle = 'rgba(255,255,255,0.8)';
@@ -1420,6 +1649,7 @@ async function saveCurrentToLibrary() {
 
   const titleEl = $('clip-title');
   E.meta.title = ((titleEl && titleEl.value) || '').trim() || E.meta.title;
+  E.meta.markers = E.markers.map(m => ({ t: m.t, label: m.label, kind: m.kind }));
 
   const ok = await putBlob(E.meta.id, E.blob);
   if (!ok) {
@@ -1465,7 +1695,8 @@ async function trimToNewClip() {
     fav: false, deleted: false, deletedAt: null,
     derivedFrom: parent.id,
     dbfsPeak: Math.round(peakDbOf(sliced) * 10) / 10,
-    sampleRate: sliced.sampleRate
+    sampleRate: sliced.sampleRate,
+    markers: []
   };
 
   await openClip(meta, wav, true);
@@ -1868,6 +2099,13 @@ function wireControls() {
   $('sel-clear').addEventListener('click', () => setSel(null));
   $('sel-all').addEventListener('click', () => { if (E.meta) setSel(0, E.meta.duration); });
 
+  $('mk-detect').addEventListener('click', runSilenceDetect);
+  $('mk-add').addEventListener('click', () => { if (E.meta) addMarker(currentPlayTime()); });
+  $('mk-prev').addEventListener('click', () => gotoMarker(-1));
+  $('mk-next').addEventListener('click', () => gotoMarker(1));
+  $('mk-trim').addEventListener('click', trimSilenceSelect);
+  $('mk-clear').addEventListener('click', clearMarkers);
+
   $('clip-title').addEventListener('change', e => {
     if (!E.meta) return;
     E.meta.title = (e.target.value || '').trim().slice(0, 60) || E.meta.title;
@@ -1918,6 +2156,14 @@ function wireKeyboard() {
     } else if (k === 's') {
       const target = document.querySelector('[data-editview="' + (S.editView === 'spec' ? 'wave' : 'spec') + '"]');
       if (target) target.click();
+    } else if (k === 'm') {
+      addMarker(currentPlayTime());
+    } else if (e.key === '[') {
+      e.preventDefault();
+      gotoMarker(-1);
+    } else if (e.key === ']') {
+      e.preventDefault();
+      gotoMarker(1);
     } else if (e.key === '+' || e.key === '=') {
       zoomBy(0.6, currentPlayTime());
     } else if (e.key === '-' || e.key === '_') {

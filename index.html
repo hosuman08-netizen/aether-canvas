@@ -125,6 +125,19 @@
           <button class="chip" id="sel-all">전체</button>
         </div>
 
+        <div class="marker-bar" id="marker-bar" role="group" aria-label="구간 마커">
+          <button class="chip" id="mk-detect" title="말소리 구간을 자동으로 찾아 마커를 놓습니다">✦ 무음 감지</button>
+          <button class="chip" id="mk-add" title="현재 위치에 마커 (M)">＋ 마커</button>
+          <span class="mk-nav hidden" id="mk-nav">
+            <button class="ico" id="mk-prev" title="이전 마커 ([)" aria-label="이전 마커">‹</button>
+            <span id="mk-read" class="mk-read" aria-live="polite">마커 0</span>
+            <button class="ico" id="mk-next" title="다음 마커 (])" aria-label="다음 마커">›</button>
+          </span>
+          <span class="mk-spacer"></span>
+          <button class="chip hidden" id="mk-trim" title="앞뒤 무음을 잘라낸 말소리 구간을 선택합니다">앞뒤 무음 다듬기</button>
+          <button class="chip hidden" id="mk-clear" title="마커를 모두 지웁니다">마커 지우기</button>
+        </div>
+
         <div class="actions">
           <button id="act-save" class="btn-hero">내 녹음에 저장</button>
           <button id="act-trim" class="chip">선택 구간만 새 녹음으로</button>

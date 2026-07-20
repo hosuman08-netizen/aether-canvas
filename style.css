@@ -454,6 +454,36 @@ h1 {
 #sel-read { color: var(--text); flex: 1; min-width: 140px; }
 .sel-bar .chip { padding: 4px 10px; font-size: 0.76rem; }
 
+.marker-bar {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--grid) * 0.75);
+  flex-wrap: wrap;
+  margin-bottom: calc(var(--grid) * 2);
+}
+.marker-bar .mk-spacer { flex: 1; }
+.marker-bar .chip { padding: 5px 11px; font-size: 0.78rem; }
+.mk-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  background: rgba(21, 18, 15, 0.6);
+}
+.mk-nav.hidden { display: none; }
+.mk-read {
+  min-width: 84px;
+  text-align: center;
+  font-size: 0.76rem;
+  color: var(--gold-soft);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.2px;
+  padding: 0 4px;
+}
+.mk-nav .ico { padding: 2px 8px; font-size: 1rem; line-height: 1; }
+
 .actions {
   display: flex;
   flex-wrap: wrap;
