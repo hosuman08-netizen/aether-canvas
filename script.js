@@ -2204,5 +2204,7 @@ window.addEventListener('load', () => {
   d.innerHTML='<div id="moneyPipe" style="margin-top:12px;padding:10px;border:1px solid #c5a46e44;border-radius:12px;background:#16121c;text-align:center;font-size:12px"><div style="color:#e0b552;font-weight:700;margin-bottom:4px">pipe</div><a style="color:#ece8f1;margin:0 6px" href="mailto:hoyashi95@gmail.com?subject=%5BLegion%5D">mail</a><a style="color:#e0b552;margin:0 6px" href="https://hosuman08-netizen.github.io/legion-hub/">Hub</a></div>';
   var app=document.getElementById('app')||document.body;
   app.appendChild(d.firstElementChild||d);
-}catch(e){}})();
-
+}catch(e){}
+/* LEGION_WAVE_87_share_counter */
+document.addEventListener('click',function(ev){try{var el=ev.target;if(!el)return;var tx=(el.textContent||'')+(el.id||'');if(/share|copy/i.test(tx)||/\uacf5\uc720|\ubcf5\uc0ac/.test(tx)){localStorage.setItem('lw_p6_airpods_a_share_counter',String((+(localStorage.getItem('lw_p6_airpods_a_share_counter')||0))+1));}}catch(e){}},true);
+})();
