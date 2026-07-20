@@ -236,3 +236,13 @@ footer {
   color: #66553f;
   letter-spacing: 0.4px;
 }
+
+/* 좁은 화면: Session/Energy/Tip 세로 정렬로 간격 정돈 */
+@media (max-width: 460px) {
+  .controls { flex-direction: column; align-items: flex-start; }
+  .info {
+    flex-direction: column;
+    gap: calc(var(--grid) * 0.5);
+    width: 100%;
+  }
+}
