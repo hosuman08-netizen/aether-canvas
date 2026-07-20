@@ -551,6 +551,7 @@ async function saveToNotebook() {
   sessions.unshift(persistable);
   if (sessions.length > 42) sessions.length = 42;
   localStorage.setItem('aether_sessions', JSON.stringify(sessions));
+  if (window.legionTrack) window.legionTrack('activate');
   document.getElementById('status').textContent = '노트북에 저장했습니다. 언제든 다시 들어보세요.';
   document.getElementById('result').classList.add('hidden');
   currentSession = null;
@@ -629,6 +630,7 @@ function shareArtistic() {
   // Real export: save the actual recording to disk.
   if (currentSession && currentSession.blob) {
     downloadRecording(currentSession.blob);
+    if (window.legionTrack) window.legionTrack('share');
     return;
   }
   const st = document.getElementById('status');
