@@ -57,6 +57,63 @@ async function loadAudioBlob(id) {
   });
 }
 
+// === Voiceprint: a compact peak envelope of the whole take ===
+// Decodes the captured audio once and reduces it to ~72 amplitude peaks — the
+// unique "fingerprint" of that voice. Stored with the session so the notebook
+// can draw each recording's own shape, turning the archive from identical text
+// blocks into a gallery of visibly distinct voices. Honest data: every peak is
+// a real max-abs over its slice of the actual samples.
+async function extractVoiceprint(blob, buckets = 72) {
+  try {
+    const buf = await blob.arrayBuffer();
+    const AC = window.AudioContext || window.webkitAudioContext;
+    const octx = new AC();
+    const decoded = await octx.decodeAudioData(buf);
+    const data = decoded.getChannelData(0);
+    const step = Math.max(1, Math.floor(data.length / buckets));
+    const peaks = [];
+    for (let b = 0; b < buckets; b++) {
+      let peak = 0;
+      const start = b * step;
+      for (let i = start; i < start + step && i < data.length; i++) {
+        const a = Math.abs(data[i]);
+        if (a > peak) peak = a;
+      }
+      peaks.push(Math.round(peak * 1000) / 1000); // 0..1, 3-decimal
+    }
+    try { octx.close(); } catch(e) {}
+    // Normalize to the loudest peak so quiet takes still read as a full shape.
+    const max = Math.max(0.0001, ...peaks);
+    return peaks.map(p => Math.round((p / max) * 1000) / 1000);
+  } catch(e) {
+    return null; // decode can fail for exotic codecs; notebook falls back gracefully
+  }
+}
+
+// Draw a saved voiceprint into a small canvas as a soft golden mirror-waveform,
+// so each notebook entry shows the actual silhouette of that recording.
+function drawVoiceprint(cnv, peaks) {
+  if (!cnv || !peaks || !peaks.length) return;
+  const c = cnv.getContext('2d');
+  const w = cnv.width, h = cnv.height, cy = h / 2;
+  c.clearRect(0, 0, w, h);
+  c.fillStyle = '#0a0806';
+  c.fillRect(0, 0, w, h);
+  const bw = w / peaks.length;
+  for (let i = 0; i < peaks.length; i++) {
+    const p = Math.max(0.02, peaks[i]);
+    const bh = p * (h * 0.44);
+    const x = i * bw;
+    // sfumato glaze: brighter core, softer with amplitude
+    c.fillStyle = `rgba(197,164,110,${0.28 + p * 0.5})`;
+    c.fillRect(x, cy - bh, Math.max(1, bw - 0.7), bh * 2);
+  }
+  // faint center line
+  c.strokeStyle = 'rgba(242,225,188,0.18)';
+  c.lineWidth = 0.7;
+  c.beginPath(); c.moveTo(0, cy); c.lineTo(w, cy); c.stroke();
+}
+
 function initCanvas() {
   canvas = document.getElementById('wave-canvas');
   ctx = canvas.getContext('2d');
@@ -327,6 +384,18 @@ async function startRecording() {
 
       currentSession = { id: Date.now(), timestamp: new Date().toISOString(), duration, size: audioBlob.size, url: audioUrl, insights, blob: audioBlob, 'sfumato-energy': Math.round(avgEnergy*1000)/1000, peakEnergy: Math.round(ampPeak*1000)/1000 };
 
+      // Preview this take's voiceprint right away, so the user sees the unique
+      // silhouette of the voice they just captured before deciding to save it.
+      extractVoiceprint(audioBlob).then(vp => {
+        if (!vp) return;
+        if (currentSession) currentSession.voiceprint = vp; // reuse at save time
+        const pv = document.getElementById('vp-preview');
+        if (pv && currentSession && currentSession.blob === audioBlob) {
+          pv.classList.remove('hidden');
+          drawVoiceprint(pv, vp);
+        }
+      });
+
       stream.getTracks().forEach(t => t.stop());
       // Keep the AudioContext alive (suspended) so playback can reuse it and the
       // cached MediaElementSource nodes stay valid. Disconnect the mic source.
@@ -344,6 +413,7 @@ async function startRecording() {
     document.getElementById('rec-btn').disabled = true;
     document.getElementById('stop-btn').disabled = false;
     document.getElementById('status').textContent = '녹음 중... 목소리를 관찰하세요.';
+    const pvOld = document.getElementById('vp-preview'); if (pvOld) pvOld.classList.add('hidden');
 
     setupAnalyser(stream);
     timerInterval = setInterval(updateTimer, 1000);
@@ -458,7 +528,7 @@ function generateDaVinciInsights(durationSec, size, avgEnergy = null) {
   return `📜 관찰 노트 — ${new Date().toLocaleDateString()}\n\n${obs[Math.floor(Math.random()*obs.length)]}\n\n길이: ${mins}분 • 인상: ${quality}\n다음: 내일 다시 들어보세요. 새로운 귀로 들으면 새로운 발견이 있습니다.`;
 }
 
-function saveToNotebook() {
+async function saveToNotebook() {
   if (!currentSession) return;
   // Capture the user's reflection immediately.
   const learn = prompt('이번 녹음에서 무엇을 느꼈나요? (노트북 메모)', '');
@@ -467,6 +537,14 @@ function saveToNotebook() {
   if (currentSession.blob) {
     saveAudioBlob(currentSession.id, currentSession.blob);
     currentSession.hasAudio = true;
+    // Extract the voiceprint so the notebook can show this recording's own
+    // silhouette — unless the result preview already computed it (reuse).
+    if (!currentSession.voiceprint) {
+      const st0 = document.getElementById('status');
+      if (st0) st0.textContent = '목소리 지문을 그리는 중...';
+      const vp = await extractVoiceprint(currentSession.blob);
+      if (vp) currentSession.voiceprint = vp;
+    }
   }
   // Blob isn't JSON-serializable — strip it before storing session metadata.
   const { blob, ...persistable } = currentSession;
@@ -491,6 +569,13 @@ async function reListenAndLearn(id) {
     else if (s.url) { playable = true; } // still-live in-session URL
   } catch(e) {}
   if (playable && url) {
+    // The visualizer animates on the main canvas, which sits above the notebook
+    // list — scroll it into view so re-listening actually SHOWS the waveform
+    // instead of animating off-screen.
+    const viz = document.querySelector('.visualizer');
+    if (viz && viz.scrollIntoView) viz.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const st = document.getElementById('status');
+    if (st) st.textContent = '다시 듣는 중 — 파형을 관찰하세요.';
     const a = new Audio(url);
     playWithVisualizer(a);
   } else {
@@ -521,9 +606,19 @@ function showNotebook() {
       const el = document.createElement('div');
       el.className = 'notebook-entry';
       const learnHtml = (s.learnings || '').replace(/\n/g, '<br>');
-      el.innerHTML = `<small>${new Date(s.timestamp).toLocaleString()} • ${s.duration}s</small><br>${s.insights.replace(/\n/g,'<br>')}<br>${learnHtml}
+      // Each entry leads with this recording's own voiceprint silhouette so the
+      // archive reads as a gallery of distinct voices, not identical text blocks.
+      const vpId = 'vp_' + s.id;
+      const vpHtml = s.voiceprint && s.voiceprint.length
+        ? `<canvas id="${vpId}" width="300" height="46" class="voiceprint" title="이 녹음의 목소리 지문"></canvas>`
+        : '';
+      el.innerHTML = `${vpHtml}<small>${new Date(s.timestamp).toLocaleString()} • ${s.duration}s</small><br>${s.insights.replace(/\n/g,'<br>')}<br>${learnHtml}
         <br><button onclick="reListenAndLearn(${s.id})" style="font-size:0.75rem;padding:4px 8px;margin-top:6px">🔁 다시 듣기</button>`;
       list.appendChild(el);
+      if (s.voiceprint && s.voiceprint.length) {
+        const cnv = el.querySelector('#' + vpId);
+        drawVoiceprint(cnv, s.voiceprint);
+      }
     });
   }
   const old = document.getElementById('result');

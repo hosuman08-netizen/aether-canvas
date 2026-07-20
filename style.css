@@ -201,6 +201,17 @@ button:focus-visible {
   white-space: pre-line;
 }
 
+/* 목소리 지문 — 각 저장 세션 고유의 실루엣(절제된 금빛) */
+.voiceprint {
+  display: block;
+  width: 100%;
+  height: 46px;
+  border-radius: 5px;
+  background: #0a0806;
+  border: 1px solid #2c2419;
+  margin-bottom: calc(var(--grid) * 1);
+}
+
 .hidden { display: none; }
 
 button {
