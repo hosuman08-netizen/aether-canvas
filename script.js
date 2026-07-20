@@ -225,6 +225,44 @@ function loadMeta() {
   purgeOldTrash();
 }
 
+
+function aeDayKey(off){const d=new Date();d.setDate(d.getDate()+(off||0));return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function bumpAeStreak(kind){
+  try{
+    let st=JSON.parse(localStorage.getItem('ae_streak')||'{}');
+    const t0=aeDayKey(0);
+    if(st.last!==t0){
+      const y=aeDayKey(-1),y2=aeDayKey(-2);
+      if(st.last&&st.last!==y&&st.last===y2&&(st.count||0)>=3){
+        const ready=!st.shieldLast||((new Date(t0)-new Date(st.shieldLast))/86400000)>=7;
+        if(ready){st.shieldLast=t0;st.last=y;}
+      }
+      st.count=(st.last===y)?(st.count||0)+1:1; st.last=t0;
+      localStorage.setItem('ae_streak',JSON.stringify(st));
+      try{legionTrack('streak',{count:st.count})}catch(e){}
+    }
+    const k='ae_day_'+t0; let day=JSON.parse(localStorage.getItem(k)||'{"saves":0}');
+    day.saves=(day.saves||0)+1; localStorage.setItem(k,JSON.stringify(day));
+    renderAeLoop();
+  }catch(e){}
+}
+function renderAeLoop(){
+  try{
+    let el=document.getElementById('aeLoop');
+    if(!el){ el=document.createElement('div'); el.id='aeLoop';
+      el.style.cssText='margin:8px 12px;padding:10px;border:1px solid #2a2438;border-radius:12px;font-size:12px;display:flex;flex-wrap:wrap;gap:8px;background:#12101a';
+      const host=document.querySelector('header')||document.querySelector('h1')||document.body;
+      host.insertAdjacentElement('afterend', el);
+    }
+    const st=JSON.parse(localStorage.getItem('ae_streak')||'{}');
+    const day=JSON.parse(localStorage.getItem('ae_day_'+aeDayKey(0))||'{}');
+    const end=new Date(); end.setHours(24,0,0,0);
+    const ms=Math.max(0,end-Date.now());
+    const clock=Math.floor(ms/3600000)+'h '+Math.floor((ms%3600000)/60000)+'m';
+    el.innerHTML='🔥 '+(st.count||0)+'d · today saves '+(day.saves||0)+' · reset '+clock+' · <span style="opacity:.7">voice art · local only</span>';
+  }catch(e){}
+}
+
 function saveMeta() {
   try {
     localStorage.setItem(META_KEY, JSON.stringify(S.clips));
@@ -1644,6 +1682,7 @@ function safeName(s) {
 }
 
 async function saveCurrentToLibrary() {
+  try{bumpAeStreak('save');}catch(e){}
   if (!E.meta || !E.blob) return;
   await requestPersistence();
 
@@ -1809,6 +1848,7 @@ function mkBtn(label, fn, cls) {
 }
 
 function renderLibrary() {
+  try{renderAeLoop();}catch(e){}
   const list = $('lib-list');
   if (!list) return;
   list.innerHTML = '';
@@ -2208,3 +2248,4 @@ window.addEventListener('load', () => {
 /* LEGION_WAVE_87_share_counter */
 document.addEventListener('click',function(ev){try{var el=ev.target;if(!el)return;var tx=(el.textContent||'')+(el.id||'');if(/share|copy/i.test(tx)||/\uacf5\uc720|\ubcf5\uc0ac/.test(tx)){localStorage.setItem('lw_p6_airpods_a_share_counter',String((+(localStorage.getItem('lw_p6_airpods_a_share_counter')||0))+1));}}catch(e){}},true);
 })();
+try{ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', renderAeLoop); else setTimeout(renderAeLoop,80); }catch(e){}
