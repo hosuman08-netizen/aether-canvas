@@ -387,7 +387,31 @@ function describeFormat() {
 /* MediaRecorder는 webm/mp4만 내놓기 때문에, 진짜 .wav가 필요하면
    디코딩된 PCM 샘플에 직접 RIFF 헤더를 씌워야 한다. */
 
-function encodeWAV(buffer, startSec, endSec) {
+function wavAppendInam(ab, title) {
+  title = String(title || '').trim().slice(0, 60);
+  if (!title || !ab || ab.byteLength < 44) return ab;
+  const enc = new TextEncoder().encode(title);
+  const inamData = enc.length + 1;
+  const inamPad = inamData & 1;
+  const inamChunk = 8 + inamData + inamPad;
+  const listSize = 4 + inamChunk;
+  const extra = 8 + listSize;
+  const out = new ArrayBuffer(ab.byteLength + extra);
+  new Uint8Array(out).set(new Uint8Array(ab));
+  const dv = new DataView(out);
+  dv.setUint32(4, out.byteLength - 8, true);
+  let o = ab.byteLength;
+  const str = s => { for (let i = 0; i < s.length; i++) dv.setUint8(o++, s.charCodeAt(i)); };
+  const u32 = v => { dv.setUint32(o, v, true); o += 4; };
+  str('LIST'); u32(listSize); str('INFO');
+  str('INAM'); u32(inamData);
+  new Uint8Array(out).set(enc, o); o += enc.length;
+  dv.setUint8(o++, 0);
+  if (inamPad) dv.setUint8(o++, 0);
+  return out;
+}
+
+function encodeWAV(buffer, startSec, endSec, title) {
   const sr = buffer.sampleRate;
   const ch = Math.min(2, buffer.numberOfChannels);
   const s0 = Math.max(0, Math.floor((startSec || 0) * sr));
@@ -417,7 +441,7 @@ function encodeWAV(buffer, startSec, endSec) {
       o += 2;
     }
   }
-  return new Blob([ab], { type: 'audio/wav' });
+  return new Blob([wavAppendInam(ab, title)], { type: 'audio/wav' });
 }
 
 function sliceBuffer(buffer, startSec, endSec) {
@@ -1877,7 +1901,7 @@ async function trimToNewClip() {
 
   // 비파괴: 원본 메타/blob은 손대지 않고 새 레코드를 만든다.
   const sliced = sliceBuffer(E.buffer, a, b);
-  const wav = encodeWAV(sliced, 0, sliced.duration);
+  const wav = encodeWAV(sliced, 0, sliced.duration, parent.title + ` (${a.toFixed(1)}–${b.toFixed(1)}초)`);
   const parent = E.meta;
 
   // 원본이 아직 저장 전이면 먼저 저장해 부모가 사라지지 않게 한다.
@@ -1910,11 +1934,11 @@ function exportWav() {
   const useSel = E.sel && Math.abs(E.sel.b - E.sel.a) > 0.05;
   const a = useSel ? Math.min(E.sel.a, E.sel.b) : 0;
   const b = useSel ? Math.max(E.sel.a, E.sel.b) : E.buffer.duration;
-  const blob = encodeWAV(E.buffer, a, b);
+  const blob = encodeWAV(E.buffer, a, b, E.meta.title);
   const name = safeName(E.meta.title) + (useSel ? '-구간' : '') + '.wav';
   if (downloadBlob(blob, name)) {
     if (window.legionTrack) window.legionTrack('share');
-    toast(useSel ? '선택 구간을 WAV로 내보냈습니다' : 'WAV로 내보냈습니다');
+    toast(useSel ? '선택 구간 WAV · 제목 메타' : 'WAV · 제목 메타');
   }
 }
 
