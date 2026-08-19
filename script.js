@@ -24,7 +24,8 @@ const S = {
   editView: 'wave',
   filter: 'all',
   search: '',
-  fftSize: 2048         // GOLD50 TOP5: 2k/4k. radix-2만. 가짜 해상도 카피 없음.
+  fftSize: 2048,        // GOLD50 TOP5: 2k/4k. radix-2만. 가짜 해상도 카피 없음.
+  titleOv: true         // WAVE88: 캔버스 제목 오버레이. 서버 STT 0.
 };
 
 // 녹음 상태
@@ -1534,6 +1535,21 @@ function drawEditOverlay(c, W, H) {
     c.moveTo(px - 6, 0); c.lineTo(px + 6, 0); c.lineTo(px, 9); c.closePath();
     c.fill();
   }
+
+  // WAVE88: 제목 오버레이. 클립 제목만. 서버 STT 0. lung 원본.
+  if (S.titleOv !== false && E.meta && E.meta.title) {
+    const t = String(E.meta.title).slice(0, 40);
+    c.font = '600 13px system-ui, sans-serif';
+    c.textAlign = 'left';
+    c.textBaseline = 'alphabetic';
+    const pad = 16;
+    const tw = Math.min(c.measureText(t).width + pad, W - 16);
+    c.fillStyle = 'rgba(10,8,6,0.72)';
+    c.fillRect(8, H - 26, tw, 18);
+    c.fillStyle = '#c5a46e';
+    c.fillText(t, 16, H - 12);
+    c.textBaseline = 'alphabetic';
+  }
 }
 
 function redrawEditor() {
@@ -2367,6 +2383,11 @@ function wireControls() {
   $('zoom-fit').addEventListener('click', zoomFit);
 
   $('play-btn').addEventListener('click', togglePlay);
+  try { S.titleOv = localStorage.getItem('aether_title_ov') !== '0'; } catch (e) { S.titleOv = true; }
+  (function markTitleOv() {
+    const el = $('title-ov');
+    if (el) el.classList.toggle('on', S.titleOv !== false);
+  })();
   function markLoopLenChips(sec) {
     [4, 8, 12].forEach(n => {
       const el = $('loop-' + n);
@@ -2406,6 +2427,14 @@ function wireControls() {
     const el = $('loop-' + n);
     if (el) el.addEventListener('click', () => applyLoopLen(n));
   });
+  const tov = $('title-ov');
+  if (tov) tov.addEventListener('click', () => {
+    S.titleOv = !S.titleOv;
+    try { localStorage.setItem('aether_title_ov', S.titleOv ? '1' : '0'); } catch (e) {}
+    tov.classList.toggle('on', S.titleOv !== false);
+    redrawEditor();
+    toast(S.titleOv ? '제목 오버레이 ON · 서버 없음' : '제목 오버레이 OFF');
+  });
   $('speed').addEventListener('change', e => {
     P.rate = parseFloat(e.target.value) || 1;
     if (P.playing) playFrom(currentPlayTime());
@@ -2426,6 +2455,7 @@ function wireControls() {
     E.meta.title = (e.target.value || '').trim().slice(0, 60) || E.meta.title;
     e.target.value = E.meta.title;
     if (!E.dirty) saveMeta();
+    redrawEditor();
   });
 
   $('act-save').addEventListener('click', saveCurrentToLibrary);
