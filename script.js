@@ -1927,14 +1927,13 @@ function exportOriginal() {
   }
 }
 
-// 지금 보고 있는 화면(파형/스펙트로그램)을 제목과 함께 이미지로 굽는다.
-function exportPng() {
-  const src = $('edit-canvas');
-  if (!src || !E.meta) return;
+// WAVE96 PNG + WAVE103 영상: 동일 크롬·오버레이. 서버 STT 0. lung 원본.
+function paintExportChrome(c, src) {
+  if (!c || !src || !E.meta) return;
   const W = src.width, H = src.height + 76;
-  const out = document.createElement('canvas');
-  out.width = W; out.height = H;
-  const c = out.getContext('2d');
+  const out = c.canvas;
+  if (out.width !== W) out.width = W;
+  if (out.height !== H) out.height = H;
   c.fillStyle = '#0a0806';
   c.fillRect(0, 0, W, H);
   c.drawImage(src, 0, 46);
@@ -1953,10 +1952,17 @@ function exportPng() {
   c.textAlign = 'left';
   c.fillText('Aether Canvas', 18, H - 12);
 
-  // WAVE96: PNG에도 #title-ov 와 동일 오버레이. 서버 STT 0. lung 원본.
   if (S.titleOv !== false && E.meta.title) {
     drawTitleOverlay(c, W, 46 + src.height, E.meta.title);
   }
+}
+
+// 지금 보고 있는 화면(파형/스펙트로그램)을 제목과 함께 이미지로 굽는다.
+function exportPng() {
+  const src = $('edit-canvas');
+  if (!src || !E.meta) return;
+  const out = document.createElement('canvas');
+  paintExportChrome(out.getContext('2d'), src);
 
   out.toBlob(b => {
     if (!b) { toast('이미지 생성에 실패했습니다.'); return; }
@@ -2012,7 +2018,12 @@ function exportWaveVideo() {
   src.connect(dest);
   src.connect(ctx.destination);
 
-  const vStream = cnv.captureStream(30);
+  // WAVE103: PNG와 동일 오버레이를 영상 프레임에. 서버 STT 0. lung 원본.
+  const vidCnv = document.createElement('canvas');
+  paintExportChrome(vidCnv.getContext('2d'), cnv);
+  let capCnv = vidCnv;
+  if (typeof vidCnv.captureStream !== 'function') capCnv = cnv;
+  const vStream = capCnv.captureStream(30);
   const mixed = new MediaStream(
     vStream.getVideoTracks().concat(dest.stream.getAudioTracks())
   );
@@ -2035,7 +2046,7 @@ function exportWaveVideo() {
     if (blob.size < 64) { toast('영상이 비었습니다. 다른 브라우저를 시도하세요.'); return; }
     if (downloadBlob(blob, safeName(E.meta.title) + '-wave.' + ext)) {
       if (window.legionTrack) window.legionTrack('share');
-      toast('파형 영상을 내보냈습니다 (로컬 · 서버 0)');
+      toast(S.titleOv !== false ? '파형 영상을 내보냈습니다 · 제목 오버레이 · 서버 0' : '파형 영상을 내보냈습니다 (로컬 · 서버 0)');
     }
   };
 
@@ -2050,13 +2061,18 @@ function exportWaveVideo() {
   const pb = $('play-btn');
   if (pb) pb.textContent = '❚❚ 일시정지';
   playLoop();
+  (function vidPaint() {
+    if (vidRec !== rec) return;
+    if (capCnv === vidCnv) paintExportChrome(vidCnv.getContext('2d'), cnv);
+    requestAnimationFrame(vidPaint);
+  })();
   setTimeout(() => {
     if (vidRec === rec && rec.state === 'recording') {
       try { rec.stop(); } catch (e) {}
     }
     if (P.src === src) stopPlayback();
   }, Math.round(dur * 1000) + 280);
-  toast('파형 영상 캡처 중… ' + dur.toFixed(1) + '초 · 서버 없음');
+  toast('파형 영상 캡처 중… ' + dur.toFixed(1) + '초 · ' + (S.titleOv !== false ? '제목 오버레이 · ' : '') + '서버 없음');
 }
 
 /* ═══════════════════ 16. 라이브러리 ═══════════════════ */
