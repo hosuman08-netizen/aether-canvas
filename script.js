@@ -64,6 +64,7 @@ const P = {
   playing: false,
   rate: 1,
   loop: false,
+  loopLen: 0,           // WAVE81: 4|8|12 고정길이 루프. 0=구간선택
   offset: 0,            // 재생 시작 지점(초)
   startedAt: 0,         // audioCtx.currentTime 기준
   pos: 0,               // 정지 상태의 위치
@@ -2366,11 +2367,44 @@ function wireControls() {
   $('zoom-fit').addEventListener('click', zoomFit);
 
   $('play-btn').addEventListener('click', togglePlay);
+  function markLoopLenChips(sec) {
+    [4, 8, 12].forEach(n => {
+      const el = $('loop-' + n);
+      if (el) el.classList.toggle('on', n === sec);
+    });
+  }
+  function applyLoopLen(sec) {
+    if (!E.meta) { toast('클립을 먼저 여세요'); return; }
+    const end = E.meta.duration || 0;
+    let a = currentPlayTime();
+    let b = Math.min(end, a + sec);
+    if (b - a < 0.2) {
+      a = Math.max(0, end - sec);
+      b = end;
+    }
+    if (b - a < 0.05) { toast('클립이 너무 짧습니다'); return; }
+    P.loopLen = sec;
+    P.loop = true;
+    setSel(a, b);
+    const lb = $('loop-btn');
+    if (lb) lb.classList.toggle('on', true);
+    markLoopLenChips(sec);
+    if (P.playing) playFrom(a);
+    toast(sec + '초 루프 · 서버 없음');
+  }
   $('loop-btn').addEventListener('click', () => {
     P.loop = !P.loop;
+    if (!P.loop) {
+      P.loopLen = 0;
+      markLoopLenChips(0);
+    }
     $('loop-btn').classList.toggle('on', P.loop);
     if (P.loop && !E.sel) toast('구간을 먼저 드래그해 선택하세요');
     if (P.playing) playFrom(currentPlayTime());
+  });
+  [4, 8, 12].forEach(n => {
+    const el = $('loop-' + n);
+    if (el) el.addEventListener('click', () => applyLoopLen(n));
   });
   $('speed').addEventListener('change', e => {
     P.rate = parseFloat(e.target.value) || 1;
