@@ -411,6 +411,66 @@ function wavAppendInam(ab, title) {
   return out;
 }
 
+function wavReadInam(ab) {
+  if (!ab || ab.byteLength < 44) return '';
+  const u8 = new Uint8Array(ab);
+  const dv = new DataView(ab);
+  const ascii = (o, n) => {
+    let s = '';
+    for (let i = 0; i < n && o + i < u8.length; i++) s += String.fromCharCode(u8[o + i]);
+    return s;
+  };
+  if (ascii(0, 4) !== 'RIFF' || ascii(8, 4) !== 'WAVE') return '';
+  let o = 12;
+  while (o + 8 <= u8.length) {
+    const id = ascii(o, 4);
+    const sz = dv.getUint32(o + 4, true);
+    if (id === 'LIST' && o + 12 <= u8.length && ascii(o + 8, 4) === 'INFO') {
+      let p = o + 12;
+      const end = Math.min(u8.length, o + 8 + sz);
+      while (p + 8 <= end) {
+        const cid = ascii(p, 4);
+        const csz = dv.getUint32(p + 4, true);
+        if (cid === 'INAM') {
+          const lim = Math.min(csz, Math.max(0, end - (p + 8)));
+          const bytes = u8.subarray(p + 8, p + 8 + lim);
+          let n = bytes.length;
+          while (n > 0 && bytes[n - 1] === 0) n--;
+          try { return new TextDecoder().decode(bytes.subarray(0, n)); }
+          catch (e) { return ''; }
+        }
+        p += 8 + csz + (csz & 1);
+        if (csz < 0) break;
+      }
+    }
+    o += 8 + sz + (sz & 1);
+    if (sz < 0) break;
+  }
+  return '';
+}
+
+function wavInamCheckLine(read) {
+  read = String(read || '').trim();
+  if (!read) return 'WAV 제목 없음 · 서버 없음';
+  return 'WAV 제목 · ' + read.slice(0, 40) + ' · INAM 검수';
+}
+
+function paintWavInamCheck(read) {
+  const line = wavInamCheckLine(read);
+  let el = $('wavInamCheck');
+  if (!el) {
+    el = document.createElement('p');
+    el.id = 'wavInamCheck';
+    el.className = 'sub';
+    el.style.cssText = 'margin-top:6px;color:#67e8f9;font-size:12px';
+    const act = document.querySelector('.actions');
+    if (act && act.parentNode) act.parentNode.insertBefore(el, act.nextSibling);
+    else return line;
+  }
+  el.textContent = line;
+  return line;
+}
+
 function encodeWAV(buffer, startSec, endSec, title) {
   const sr = buffer.sampleRate;
   const ch = Math.min(2, buffer.numberOfChannels);
@@ -1938,6 +1998,11 @@ function exportWav() {
   const name = safeName(E.meta.title) + (useSel ? '-구간' : '') + '.wav';
   if (downloadBlob(blob, name)) {
     if (window.legionTrack) window.legionTrack('share');
+    if (blob.arrayBuffer) {
+      blob.arrayBuffer().then(ab => paintWavInamCheck(wavReadInam(ab))).catch(() => paintWavInamCheck(''));
+    } else {
+      paintWavInamCheck(E.meta && E.meta.title);
+    }
     toast(useSel ? '선택 구간 WAV · 제목 메타' : 'WAV · 제목 메타');
   }
 }
