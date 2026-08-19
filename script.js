@@ -1538,18 +1538,24 @@ function drawEditOverlay(c, W, H) {
 
   // WAVE88: 제목 오버레이. 클립 제목만. 서버 STT 0. lung 원본.
   if (S.titleOv !== false && E.meta && E.meta.title) {
-    const t = String(E.meta.title).slice(0, 40);
-    c.font = '600 13px system-ui, sans-serif';
-    c.textAlign = 'left';
-    c.textBaseline = 'alphabetic';
-    const pad = 16;
-    const tw = Math.min(c.measureText(t).width + pad, W - 16);
-    c.fillStyle = 'rgba(10,8,6,0.72)';
-    c.fillRect(8, H - 26, tw, 18);
-    c.fillStyle = '#c5a46e';
-    c.fillText(t, 16, H - 12);
-    c.textBaseline = 'alphabetic';
+    drawTitleOverlay(c, W, H, E.meta.title);
   }
+}
+
+function drawTitleOverlay(c, W, bottom, title) {
+  if (!c || !title) return;
+  const t = String(title).slice(0, 40);
+  c.save();
+  c.font = '600 13px system-ui, sans-serif';
+  c.textAlign = 'left';
+  c.textBaseline = 'alphabetic';
+  const pad = 16;
+  const tw = Math.min(c.measureText(t).width + pad, W - 16);
+  c.fillStyle = 'rgba(10,8,6,0.72)';
+  c.fillRect(8, bottom - 26, tw, 18);
+  c.fillStyle = '#c5a46e';
+  c.fillText(t, 16, bottom - 12);
+  c.restore();
 }
 
 function redrawEditor() {
@@ -1933,10 +1939,12 @@ function exportPng() {
   c.fillRect(0, 0, W, H);
   c.drawImage(src, 0, 46);
 
-  c.fillStyle = '#c5a46e';
-  c.font = '600 20px system-ui, sans-serif';
-  c.textAlign = 'left';
-  c.fillText(E.meta.title, 18, 30);
+  if (S.titleOv === false) {
+    c.fillStyle = '#c5a46e';
+    c.font = '600 20px system-ui, sans-serif';
+    c.textAlign = 'left';
+    c.fillText(E.meta.title, 18, 30);
+  }
 
   c.fillStyle = 'rgba(163,138,102,0.9)';
   c.font = '12px system-ui, sans-serif';
@@ -1945,11 +1953,16 @@ function exportPng() {
   c.textAlign = 'left';
   c.fillText('Aether Canvas', 18, H - 12);
 
+  // WAVE96: PNG에도 #title-ov 와 동일 오버레이. 서버 STT 0. lung 원본.
+  if (S.titleOv !== false && E.meta.title) {
+    drawTitleOverlay(c, W, 46 + src.height, E.meta.title);
+  }
+
   out.toBlob(b => {
     if (!b) { toast('이미지 생성에 실패했습니다.'); return; }
     if (downloadBlob(b, safeName(E.meta.title) + '.png')) {
       if (window.legionTrack) window.legionTrack('share');
-      toast('이미지로 내보냈습니다');
+      toast(S.titleOv !== false ? '이미지로 내보냈습니다 · 제목 오버레이' : '이미지로 내보냈습니다');
     }
   }, 'image/png');
 }
