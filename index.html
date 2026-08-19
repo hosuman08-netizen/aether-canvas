@@ -55,11 +55,18 @@
         </div>
       </div>
 
+      <!-- GOLD50 TOP2: Web Speech API 로컬 캡션. 서버 STT 없음. 가짜 자막 없음. -->
+      <div class="caption-wrap">
+        <div id="live-caption" class="live-caption" aria-live="polite"></div>
+        <div id="caption-note" class="caption-note">캡션: 브라우저 Web Speech · 서버 STT 없음 · 오프라인이면 실패</div>
+      </div>
+
       <details class="opts">
         <summary>입력 설정</summary>
         <label class="opt"><input type="checkbox" id="opt-ns" checked> 잡음 줄이기</label>
         <label class="opt"><input type="checkbox" id="opt-ec" checked> 에코 제거</label>
         <label class="opt"><input type="checkbox" id="opt-agc"> 자동 음량 조절</label>
+        <label class="opt"><input type="checkbox" id="opt-caption" checked> 로컬 캡션 (Web Speech)</label>
         <div class="opt-note" id="fmt-note">녹음 형식 확인 중…</div>
       </details>
 
@@ -76,6 +83,7 @@
         <div class="clip-head">
           <input id="clip-title" class="title-input" type="text" maxlength="60" aria-label="녹음 제목">
           <div class="clip-meta" id="clip-meta"></div>
+          <div id="clip-caption" class="clip-caption hidden"></div>
         </div>
 
         <!-- 전체 조감 -->

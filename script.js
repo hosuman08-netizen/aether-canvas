@@ -71,6 +71,11 @@ const P = {
 
 let audioCtx = null;
 
+/* GOLD50 TOP2: 브라우저 Web Speech API 캡션.
+   이 앱은 음성을 우리 서버로 보내지 않는다. Chrome 구현은 네트워크가 필요할 수 있음.
+   오프라인·미지원·network 에러 = 실패 고지. 가짜 자막 없음. */
+const Cap = { rec: null, final: '', interim: '' };
+
 /* ═══════════════════ 1. 유틸 ═══════════════════ */
 
 const $ = id => document.getElementById(id);
@@ -949,6 +954,106 @@ function drawLiveSpec(freqData, sampleRate) {
   c.fillText('Hz', 4, 12);
 }
 
+/* ═══════════════════ 8b. 로컬 캡션 (Web Speech API · 서버 STT 없음) ═══════════════════ */
+
+function speechCtor() {
+  return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+}
+
+function setCaptionNote(msg, isFail) {
+  const el = $('caption-note');
+  if (!el) return;
+  el.textContent = msg || '';
+  el.classList.toggle('is-fail', !!isFail);
+}
+
+function setCaptionText(t) {
+  const el = $('live-caption');
+  if (el) el.textContent = t || '';
+}
+
+function captionSnapshot() {
+  return ((Cap.final || '') + ' ' + (Cap.interim || '')).replace(/\s+/g, ' ').trim();
+}
+
+function stopCaption() {
+  const rec = Cap.rec;
+  Cap.rec = null;
+  if (rec) {
+    try { rec.onend = null; rec.onerror = null; rec.onresult = null; } catch (e) {}
+    try { rec.stop(); } catch (e) {}
+    try { rec.abort(); } catch (e) {}
+  }
+}
+
+function startCaption() {
+  stopCaption();
+  Cap.final = '';
+  Cap.interim = '';
+  setCaptionText('');
+
+  const want = $('opt-caption') ? $('opt-caption').checked : true;
+  if (!want) {
+    setCaptionNote('캡션 끔 · 서버 STT 없음');
+    return;
+  }
+
+  const Ctor = speechCtor();
+  if (!Ctor) {
+    setCaptionNote('이 브라우저는 Web Speech API가 없습니다. 서버 STT 없음 · 캡션 불가.', true);
+    return;
+  }
+  if (typeof navigator.onLine !== 'undefined' && navigator.onLine === false) {
+    setCaptionNote('오프라인 — 캡션 실패. 이 앱은 서버 STT를 쓰지 않습니다.', true);
+    return;
+  }
+
+  try {
+    const rec = new Ctor();
+    rec.lang = document.documentElement.lang || 'ko-KR';
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.maxAlternatives = 1;
+    rec.onresult = function (ev) {
+      let fin = '';
+      let inter = '';
+      for (let i = 0; i < ev.results.length; i++) {
+        const r = ev.results[i];
+        const t = (r[0] && r[0].transcript) || '';
+        if (r.isFinal) fin += (fin ? ' ' : '') + t.trim();
+        else inter += t;
+      }
+      Cap.final = fin.trim();
+      Cap.interim = inter.trim();
+      setCaptionText(captionSnapshot());
+    };
+    rec.onerror = function (ev) {
+      const err = (ev && ev.error) || '';
+      if (err === 'no-speech' || err === 'aborted') return;
+      if (err === 'network' || err === 'service-not-allowed') {
+        setCaptionNote('캡션 실패 (네트워크/오프라인). 서버 STT 없음. 이 앱은 음성을 우리 서버로 보내지 않습니다.', true);
+        stopCaption();
+        return;
+      }
+      if (err === 'not-allowed') {
+        setCaptionNote('캡션 권한 거부. 서버 STT 없음.', true);
+        return;
+      }
+      setCaptionNote('캡션 실패: ' + err + ' · 서버 STT 없음.', true);
+    };
+    rec.onend = function () {
+      if (R.recording && Cap.rec === rec) {
+        try { rec.start(); } catch (e) {}
+      }
+    };
+    rec.start();
+    Cap.rec = rec;
+    setCaptionNote('브라우저 Web Speech · 서버 STT 없음. Chrome은 네트워크가 필요할 수 있음. 오프라인이면 실패.');
+  } catch (e) {
+    setCaptionNote('캡션을 시작하지 못했습니다. 서버 STT 없음.', true);
+  }
+}
+
 /* ═══════════════════ 9. 녹음 ═══════════════════ */
 
 let recAnalyser = null, recTime = null, recFreq = null, recFloat = null;
@@ -1019,6 +1124,7 @@ async function startRecording() {
     setStatus('녹음 중 · 정지 또는 스페이스');
 
     liveLoop();
+    startCaption();
   } catch (err) {
     setStatus('마이크 권한이 필요합니다. 브라우저 주소창의 권한 설정을 확인하세요.');
   }
@@ -1068,6 +1174,7 @@ function stopRecording() {
   if (!R.recording || !R.mediaRecorder) return;
   R.recording = false;
   cancelAnimationFrame(R.raf);
+  stopCaption();
   try { R.mediaRecorder.stop(); } catch (e) {}
   $('rec-btn').disabled = false;
   $('rec-btn').textContent = '● 녹음';
@@ -1101,7 +1208,8 @@ async function finishRecording() {
     derivedFrom: null,
     dbfsPeak: isFinite(R.peakDb) ? Math.round(R.peakDb * 10) / 10 : null,
     sampleRate: null,
-    markers: []
+    markers: [],
+    caption: captionSnapshot()
   };
 
   await openClip(meta, blob, true);
@@ -1191,6 +1299,13 @@ function renderClipMeta() {
   if (m.dbfsPeak != null && isFinite(m.dbfsPeak)) bits.push('피크 ' + dbLabel(m.dbfsPeak) + ' dBFS');
   if (m.derivedFrom) bits.push('편집본');
   el.textContent = bits.join(' • ');
+
+  const capEl = $('clip-caption');
+  if (capEl) {
+    const cap = (m.caption || '').trim();
+    capEl.textContent = cap ? cap : '';
+    capEl.classList.toggle('hidden', !cap);
+  }
 
   const dur = $('dur-read');
   if (dur) dur.textContent = fmtTime(m.duration, true);
@@ -1834,7 +1949,7 @@ function filteredClips() {
     else if (c.deleted) return false;
     if (S.filter === 'fav' && !c.fav) return false;
     if (q) {
-      const hay = ((c.title || '') + ' ' + (c.note || '')).toLowerCase();
+      const hay = ((c.title || '') + ' ' + (c.note || '') + ' ' + (c.caption || '')).toLowerCase();
       if (hay.indexOf(q) < 0) return false;
     }
     return true;
@@ -2089,6 +2204,12 @@ function wireRuler() {
 function wireControls() {
   $('rec-btn').addEventListener('click', startRecording);
   $('stop-btn').addEventListener('click', stopRecording);
+  window.addEventListener('offline', function () {
+    if (R.recording) {
+      stopCaption();
+      setCaptionNote('오프라인 — 캡션 실패. 이 앱은 서버 STT를 쓰지 않습니다.', true);
+    }
+  });
 
   document.querySelectorAll('.tab').forEach(t => {
     t.addEventListener('click', () => switchTab(t.dataset.tab));
