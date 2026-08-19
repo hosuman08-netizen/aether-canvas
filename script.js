@@ -1937,6 +1937,98 @@ function exportPng() {
   }, 'image/png');
 }
 
+/* GOLD50 TOP3: 캔버스+오디오 MediaRecorder 파형 영상. 서버 업로드 0. lung 미수정. */
+const VID_MIME = [
+  'video/webm;codecs=vp8,opus',
+  'video/webm;codecs=vp9,opus',
+  'video/webm',
+  'video/mp4'
+];
+let vidRec = null;
+
+function pickVidMime() {
+  if (!window.MediaRecorder) return null;
+  if (!MediaRecorder.isTypeSupported) return '';
+  for (const m of VID_MIME) {
+    try { if (MediaRecorder.isTypeSupported(m)) return m; } catch (e) {}
+  }
+  return '';
+}
+
+function exportWaveVideo() {
+  if (vidRec) { toast('이미 영상을 만드는 중'); return; }
+  if (!E.buffer || !E.meta) { toast('클립을 연 뒤 파형 영상을 보내세요'); return; }
+  const cnv = $('edit-canvas');
+  if (!cnv || typeof cnv.captureStream !== 'function') {
+    toast('이 브라우저는 캔버스 영상 캡처를 지원하지 않습니다');
+    return;
+  }
+  const mime = pickVidMime();
+  if (mime === null) { toast('MediaRecorder 없음'); return; }
+  const ctx = ctxGet();
+  if (!ctx) { toast('오디오 컨텍스트를 열 수 없습니다'); return; }
+
+  switchTab('edit');
+  redrawEditor();
+
+  const useSel = E.sel && Math.abs(E.sel.b - E.sel.a) > 0.05;
+  const tA = useSel ? Math.min(E.sel.a, E.sel.b) : 0;
+  const tB = useSel ? Math.max(E.sel.a, E.sel.b) : E.buffer.duration;
+  const dur = Math.max(0.4, Math.min(12, tB - tA));
+
+  const dest = ctx.createMediaStreamDestination();
+  const src = ctx.createBufferSource();
+  src.buffer = E.buffer;
+  src.connect(dest);
+  src.connect(ctx.destination);
+
+  const vStream = cnv.captureStream(30);
+  const mixed = new MediaStream(
+    vStream.getVideoTracks().concat(dest.stream.getAudioTracks())
+  );
+  let rec;
+  try {
+    rec = mime ? new MediaRecorder(mixed, { mimeType: mime }) : new MediaRecorder(mixed);
+  } catch (e) {
+    rec = new MediaRecorder(mixed);
+  }
+  const chunks = [];
+  rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+  rec.onstop = () => {
+    vidRec = null;
+    try { src.stop(); } catch (e) {}
+    try { src.disconnect(); dest.disconnect(); } catch (e) {}
+    vStream.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
+    const type = rec.mimeType || mime || 'video/webm';
+    const blob = new Blob(chunks, { type: type });
+    const ext = /mp4/i.test(type) ? 'mp4' : 'webm';
+    if (blob.size < 64) { toast('영상이 비었습니다. 다른 브라우저를 시도하세요.'); return; }
+    if (downloadBlob(blob, safeName(E.meta.title) + '-wave.' + ext)) {
+      if (window.legionTrack) window.legionTrack('share');
+      toast('파형 영상을 내보냈습니다 (로컬 · 서버 0)');
+    }
+  };
+
+  stopPlayback();
+  vidRec = rec;
+  rec.start(200);
+  src.start(0, tA, dur);
+  P.src = src;
+  P.offset = tA;
+  P.startedAt = ctx.currentTime;
+  P.playing = true;
+  const pb = $('play-btn');
+  if (pb) pb.textContent = '❚❚ 일시정지';
+  playLoop();
+  setTimeout(() => {
+    if (vidRec === rec && rec.state === 'recording') {
+      try { rec.stop(); } catch (e) {}
+    }
+    if (P.src === src) stopPlayback();
+  }, Math.round(dur * 1000) + 280);
+  toast('파형 영상 캡처 중… ' + dur.toFixed(1) + '초 · 서버 없음');
+}
+
 /* ═══════════════════ 16. 라이브러리 ═══════════════════ */
 
 function updateLibCount() {
@@ -2307,6 +2399,7 @@ function wireControls() {
   $('act-wav').addEventListener('click', exportWav);
   $('act-orig').addEventListener('click', exportOriginal);
   $('act-png').addEventListener('click', exportPng);
+  $('act-vid').addEventListener('click', exportWaveVideo);
 }
 
 function wireKeyboard() {
