@@ -23,7 +23,8 @@ const S = {
   liveView: 'wave',
   editView: 'wave',
   filter: 'all',
-  search: ''
+  search: '',
+  fftSize: 2048         // GOLD50 TOP5: 2k/4k. radix-2만. 가짜 해상도 카피 없음.
 };
 
 // 녹음 상태
@@ -122,6 +123,25 @@ function toDb(amp) {
 function dbLabel(db) {
   if (!isFinite(db) || db <= DB_FLOOR) return '−∞';
   return (db > 0 ? '+' : '') + db.toFixed(1);
+}
+
+function fftSize() { return S.fftSize === 4096 ? 4096 : 2048; }
+
+function applyFftSize(n) {
+  const size = n === 4096 ? 4096 : 2048;
+  S.fftSize = size;
+  if (recAnalyser) {
+    recAnalyser.fftSize = size;
+    recTime = new Uint8Array(recAnalyser.fftSize);
+    recFreq = new Uint8Array(recAnalyser.frequencyBinCount);
+    recFloat = new Float32Array(recAnalyser.fftSize);
+    liveSpecInit = false;
+  }
+  E.specCache = null;
+  document.querySelectorAll('[data-fft]').forEach(x => {
+    x.classList.toggle('is-active', Number(x.dataset.fft) === size);
+  });
+  if (S.editView === 'spec' && E.buffer) redrawEditor();
 }
 
 let toastTimer = 0;
@@ -466,7 +486,7 @@ function specColor(t) {
 
 // 지정 구간의 Mel 스펙트로그램을 오프스크린 캔버스에 그린다.
 function computeSpectrogram(buffer, startSec, endSec, W, H) {
-  const FFT = 2048;                      // 목소리에 적합한 시간/주파수 절충
+  const FFT = fftSize();                 // GOLD50: 2k=시간 / 4k=주파수. radix-2.
   const sr = buffer.sampleRate;
   const data = buffer.getChannelData(0);
   const s0 = Math.max(0, Math.floor(startSec * sr));
@@ -811,6 +831,8 @@ function drawMeter(db, holdDb, clipped) {
   if (flag) flag.classList.toggle('hidden', !clipped);
   const read = $('meter-db');
   if (read) read.textContent = dbLabel(db);
+  const holdEl = $('meter-hold');
+  if (holdEl) holdEl.textContent = 'HOLD ' + dbLabel(holdDb);
 }
 
 function resetMeter() {
@@ -1098,7 +1120,7 @@ async function startRecording() {
     if (ctx) {
       const src = ctx.createMediaStreamSource(stream);
       recAnalyser = ctx.createAnalyser();
-      recAnalyser.fftSize = 4096;               // 목소리 대역에 적합한 해상도
+      recAnalyser.fftSize = fftSize();          // 2k/4k 토글. 창=Hann은 스펙 계산과 동일.
       recAnalyser.smoothingTimeConstant = 0.6;
       recAnalyser.minDecibels = -90;
       recAnalyser.maxDecibels = -10;
@@ -1438,7 +1460,7 @@ function drawWaveInto(c, W, H) {
 }
 
 function specKey() {
-  return `${E.meta ? E.meta.id : 0}|${E.t0.toFixed(3)}|${E.t1.toFixed(3)}`;
+  return `${E.meta ? E.meta.id : 0}|${E.t0.toFixed(3)}|${E.t1.toFixed(3)}|${fftSize()}`;
 }
 
 function ensureSpectrogram() {
@@ -2222,6 +2244,10 @@ function wireControls() {
       liveSpecInit = false;
       if (!R.recording) { clearLive(); drawLiveIdle(); }
     });
+  });
+
+  document.querySelectorAll('[data-fft]').forEach(b => {
+    b.addEventListener('click', () => applyFftSize(Number(b.dataset.fft)));
   });
 
   document.querySelectorAll('[data-editview]').forEach(b => {

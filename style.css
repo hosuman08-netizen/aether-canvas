@@ -127,6 +127,11 @@ h1 {
   position: absolute;
   top: calc(var(--grid) * 2.5);
   right: calc(var(--grid) * 2.5);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  z-index: 2;
 }
 
 .stage-hint {
@@ -178,12 +183,19 @@ h1 {
   font-variant-numeric: tabular-nums;
   font-size: 0.95rem;
   color: var(--text);
-  white-space: nowrap;
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 4px;
+  max-width: 7.2rem;
 }
 .meter-read .unit { font-size: 0.66rem; color: var(--muted); letter-spacing: 0.4px; }
+.hold-num {
+  width: 100%;
+  font-size: 0.66rem;
+  color: var(--muted);
+  letter-spacing: 0.3px;
+}
 .clip {
   background: var(--danger);
   color: #fff;

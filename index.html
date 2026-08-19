@@ -40,6 +40,10 @@
             <button class="seg-btn is-active" data-liveview="wave">파형</button>
             <button class="seg-btn" data-liveview="spec">스펙트로그램</button>
           </div>
+          <div class="seg" role="group" aria-label="FFT 크기">
+            <button class="seg-btn is-active" data-fft="2048" title="FFT 2048 — 시간 해상도">2k</button>
+            <button class="seg-btn" data-fft="4096" title="FFT 4096 — 주파수 해상도">4k</button>
+          </div>
         </div>
         <div id="live-hint" class="stage-hint">● 녹음을 누르면 시작합니다</div>
       </div>
@@ -51,6 +55,7 @@
         </div>
         <div class="meter-read">
           <span id="meter-db">−∞</span><span class="unit">dBFS</span>
+          <span id="meter-hold" class="hold-num">HOLD −∞</span>
           <span id="clip-flag" class="clip hidden">CLIP</span>
         </div>
       </div>
@@ -102,6 +107,10 @@
           <div class="seg" role="group" aria-label="편집 보기 전환">
             <button class="seg-btn is-active" data-editview="wave">파형</button>
             <button class="seg-btn" data-editview="spec">스펙트로그램</button>
+          </div>
+          <div class="seg" role="group" aria-label="FFT 크기">
+            <button class="seg-btn is-active" data-fft="2048" title="FFT 2048 — 시간 해상도">2k</button>
+            <button class="seg-btn" data-fft="4096" title="FFT 4096 — 주파수 해상도">4k</button>
           </div>
           <div class="spacer"></div>
           <div class="zoomers">
