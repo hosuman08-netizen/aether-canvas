@@ -451,8 +451,14 @@ function wavReadInam(ab) {
 
 function wavInamCheckLine(read) {
   read = String(read || '').trim();
-  if (!read) return 'WAV 제목 없음 · 서버 없음';
-  return 'WAV 제목 · ' + read.slice(0, 40) + ' · INAM 검수';
+  if (!read) return 'WAV 제목 없음 · 서버 없음 · 탭해서 지우기';
+  return 'WAV 제목 · ' + read.slice(0, 40) + ' · INAM 검수 · 탭해서 지우기';
+}
+
+function clearWavInamCheck() {
+  const el = $('wavInamCheck');
+  if (el && el.parentNode) el.parentNode.removeChild(el);
+  return '';
 }
 
 function paintWavInamCheck(read) {
@@ -462,12 +468,16 @@ function paintWavInamCheck(read) {
     el = document.createElement('p');
     el.id = 'wavInamCheck';
     el.className = 'sub';
-    el.style.cssText = 'margin-top:6px;color:#67e8f9;font-size:12px';
+    el.style.cssText = 'margin-top:6px;color:#67e8f9;font-size:12px;cursor:pointer';
     const act = document.querySelector('.actions');
     if (act && act.parentNode) act.parentNode.insertBefore(el, act.nextSibling);
     else return line;
   }
   el.textContent = line;
+  el.setAttribute('role', 'button');
+  el.title = '탭해서 지우기';
+  el.style.cursor = 'pointer';
+  el.onclick = clearWavInamCheck;
   return line;
 }
 
