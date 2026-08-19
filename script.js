@@ -459,11 +459,41 @@ function wavInamClearedLine() {
   return '지움 확인 · WAV 제목 검수 없음 · 서버 없음';
 }
 
+function wavInamClearedEmptyLine() {
+  return 'WAV 제목 검수 없음 · 서버 없음';
+}
+
+const WAV_INAM_CLEARED_HIDE_MS = 3000;
+let wavInamClearedHideTimer = 0;
+let wavInamClearedHidden = false;
+
+function wavInamClearedHideMs() {
+  return WAV_INAM_CLEARED_HIDE_MS;
+}
+
+function hideWavInamCleared() {
+  wavInamClearedHidden = true;
+  wavInamClearedHideTimer = 0;
+  const el = $('wavInamCleared');
+  if (el) el.textContent = wavInamClearedEmptyLine();
+  return true;
+}
+
+function armWavInamClearedHide() {
+  if (wavInamClearedHideTimer) {
+    clearTimeout(wavInamClearedHideTimer);
+    wavInamClearedHideTimer = 0;
+  }
+  wavInamClearedHidden = false;
+  wavInamClearedHideTimer = setTimeout(hideWavInamCleared, WAV_INAM_CLEARED_HIDE_MS);
+}
+
 function clearWavInamCheck() {
   const el = $('wavInamCheck');
   if (!el) {
     const gone = $('wavInamCleared');
-    return gone ? gone.textContent : wavInamClearedLine();
+    if (gone && !wavInamClearedHidden) return gone.textContent;
+    return wavInamClearedHidden ? wavInamClearedEmptyLine() : wavInamClearedLine();
   }
   el.id = 'wavInamCleared';
   el.textContent = wavInamClearedLine();
@@ -471,10 +501,16 @@ function clearWavInamCheck() {
   el.title = '';
   el.style.cursor = 'default';
   el.onclick = null;
+  armWavInamClearedHide();
   return el.textContent;
 }
 
 function paintWavInamCheck(read) {
+  if (wavInamClearedHideTimer) {
+    clearTimeout(wavInamClearedHideTimer);
+    wavInamClearedHideTimer = 0;
+  }
+  wavInamClearedHidden = false;
   const line = wavInamCheckLine(read);
   let el = $('wavInamCheck') || $('wavInamCleared');
   if (!el) {
