@@ -488,6 +488,31 @@ function armWavInamClearedHide() {
   wavInamClearedHideTimer = setTimeout(hideWavInamCleared, WAV_INAM_CLEARED_HIDE_MS);
 }
 
+function bindWavInamClearedTap() {
+  const el = $('wavInamCleared');
+  if (!el) return false;
+  try { el.setAttribute('role', 'button'); } catch (e0) {}
+  try { el.tabIndex = 0; } catch (e1) {}
+  try { el.style.cursor = 'pointer'; } catch (e2) {}
+  try { el.setAttribute('data-tap-hide', '1'); } catch (e3) {}
+  el.title = '탭=확인줄 즉시숨김 · 서버 없음';
+  el.onclick = function (ev) {
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    if (wavInamClearedHideTimer) {
+      try { clearTimeout(wavInamClearedHideTimer); } catch (e4) {}
+      wavInamClearedHideTimer = 0;
+    }
+    hideWavInamCleared();
+  };
+  el.onkeydown = function (ev) {
+    const k = ev && ev.key;
+    if (k !== 'Enter' && k !== ' ') return;
+    if (ev.preventDefault) ev.preventDefault();
+    el.onclick(ev);
+  };
+  return true;
+}
+
 function clearWavInamCheck() {
   const el = $('wavInamCheck');
   if (!el) {
@@ -497,11 +522,9 @@ function clearWavInamCheck() {
   }
   el.id = 'wavInamCleared';
   el.textContent = wavInamClearedLine();
-  el.removeAttribute('role');
   el.title = '';
-  el.style.cursor = 'default';
-  el.onclick = null;
   armWavInamClearedHide();
+  bindWavInamClearedTap();
   return el.textContent;
 }
 
@@ -524,9 +547,11 @@ function paintWavInamCheck(read) {
   el.id = 'wavInamCheck';
   el.textContent = line;
   el.setAttribute('role', 'button');
+  el.removeAttribute('data-tap-hide');
   el.title = '탭해서 지우기';
   el.style.cursor = 'pointer';
   el.onclick = clearWavInamCheck;
+  el.onkeydown = null;
   return line;
 }
 
