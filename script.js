@@ -1012,10 +1012,11 @@ async function startRecording() {
 
     $('rec-btn').disabled = true;
     $('rec-btn').textContent = '● 녹음 중';
+    $('rec-btn').setAttribute('aria-label', '녹음 중');
     $('rec-btn').classList.add('is-live');
     $('stop-btn').disabled = false;
     const hint = $('live-hint'); if (hint) hint.classList.add('hidden');
-    setStatus('녹음 중 — 정지를 누르면 편집 화면으로 넘어갑니다.');
+    setStatus('녹음 중 · 정지 또는 스페이스');
 
     liveLoop();
   } catch (err) {
@@ -1069,7 +1070,8 @@ function stopRecording() {
   cancelAnimationFrame(R.raf);
   try { R.mediaRecorder.stop(); } catch (e) {}
   $('rec-btn').disabled = false;
-  $('rec-btn').textContent = '● 녹음 시작';
+  $('rec-btn').textContent = '● 녹음';
+  $('rec-btn').setAttribute('aria-label', '녹음 시작');
   $('rec-btn').classList.remove('is-live');
   $('stop-btn').disabled = true;
   setStatus('처리 중…');
@@ -2230,6 +2232,8 @@ window.addEventListener('load', () => {
   storageLine();
   const trim = $('act-trim');
   if (trim) trim.disabled = true;
+  const rec = $('rec-btn');
+  if (rec && rec.focus) try { rec.focus(); } catch (e) {}
 
   window.addEventListener('beforeunload', e => {
     if (E.dirty && E.meta) { e.preventDefault(); e.returnValue = ''; }

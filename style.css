@@ -30,8 +30,9 @@ body {
 
 .container { max-width: 820px; width: 100%; }
 
-/* ── 헤더 ── */
-header { text-align: center; margin-bottom: calc(var(--grid) * 3); }
+/* ── 헤더 (TTV: 첫 시선=●녹음. 카피 최소. 가짜 예술사 없음) ── */
+header { text-align: center; margin-bottom: calc(var(--grid) * 1.5); }
+header.brand-compact { margin-bottom: calc(var(--grid) * 1); }
 
 .disclaimer {
   font-size: 0.68rem;
@@ -39,15 +40,15 @@ header { text-align: center; margin-bottom: calc(var(--grid) * 3); }
   padding: 4px 10px;
   border-radius: 3px;
   color: var(--gold-soft);
-  margin-bottom: calc(var(--grid) * 1.5);
+  margin-bottom: calc(var(--grid) * 1);
   letter-spacing: 0.6px;
   display: inline-block;
 }
 
 h1 {
-  font-size: 2.4rem;
-  margin: 0 0 calc(var(--grid) * 0.5);
-  letter-spacing: -1.2px;
+  font-size: 1.35rem;
+  margin: 0;
+  letter-spacing: -0.6px;
   color: var(--gold);
   font-weight: 600;
   text-shadow: 0 1px 18px rgba(197, 164, 110, 0.18);
@@ -55,7 +56,7 @@ h1 {
 
 .tagline {
   margin: 0;
-  font-size: 0.98rem;
+  font-size: 0.86rem;
   color: var(--gold-soft);
   letter-spacing: 0.2px;
 }
@@ -65,7 +66,7 @@ h1 {
   display: flex;
   gap: calc(var(--grid) * 0.5);
   border-bottom: 1px solid var(--line);
-  margin-bottom: calc(var(--grid) * 3);
+  margin-bottom: calc(var(--grid) * 1.5);
 }
 
 .tab {
@@ -201,13 +202,21 @@ h1 {
   gap: calc(var(--grid) * 2);
   margin-bottom: calc(var(--grid) * 2);
 }
+.rec-row.rec-hero {
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--grid) * 1);
+  margin: 0 0 calc(var(--grid) * 1.5);
+}
 .rec-time {
   font-size: 1.9rem;
   font-variant-numeric: tabular-nums;
   color: var(--gold);
   letter-spacing: -0.5px;
 }
+.rec-hero .rec-time { font-size: 1.25rem; color: var(--gold-soft); }
 .rec-buttons { display: flex; gap: var(--grid); }
+.rec-hero .rec-buttons { width: 100%; justify-content: center; align-items: center; }
 
 .btn-hero {
   background: var(--gold);
@@ -222,6 +231,15 @@ h1 {
   font-family: inherit;
   box-shadow: 0 2px 16px rgba(197, 164, 110, 0.2);
   transition: transform 160ms var(--ease), box-shadow 160ms var(--ease), opacity 160ms var(--ease);
+}
+.rec-hero #rec-btn {
+  min-width: 168px;
+  min-height: 72px;
+  padding: 18px 36px;
+  border-radius: 999px;
+  font-size: 1.2rem;
+  font-weight: 700;
+  box-shadow: 0 8px 36px rgba(197, 164, 110, 0.38);
 }
 .btn-hero:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 22px rgba(197, 164, 110, 0.32); }
 .btn-hero:active:not(:disabled) { transform: translateY(0.5px); }

@@ -10,11 +10,11 @@
   <meta name="theme-color" content="#0a0806">
 </head>
 <body>
+  <!-- TTV: 첫 액션=●녹음. 가짜 예술사/연대기 없음. lung-surprise-eye.js 원본 유지. -->
   <div class="container">
-    <header>
+    <header class="brand-compact">
       <div class="disclaimer">가상의 아트 도구 • 순수 창작용 • 도박 요소 없음 • 18세 이상 권장</div>
       <h1>Aether Canvas</h1>
-      <p class="tagline">목소리를 담고, 보고, 다듬습니다.</p>
     </header>
 
     <nav class="tabs" role="tablist" aria-label="화면 전환">
@@ -25,6 +25,14 @@
 
     <!-- ─────────── 녹음 ─────────── -->
     <section class="panel is-active" data-panel="record">
+      <div class="rec-row rec-hero">
+        <div class="rec-buttons">
+          <button id="rec-btn" class="btn-hero" aria-label="녹음 시작" autofocus>● 녹음</button>
+          <button id="stop-btn" class="btn-hero btn-ghost" disabled>■ 정지</button>
+        </div>
+        <div class="rec-time" id="rec-time">00:00.0</div>
+      </div>
+
       <div class="stage">
         <canvas id="live-canvas" width="1200" height="300" aria-label="실시간 음성 시각화"></canvas>
         <div class="stage-tools">
@@ -33,7 +41,7 @@
             <button class="seg-btn" data-liveview="spec">스펙트로그램</button>
           </div>
         </div>
-        <div id="live-hint" class="stage-hint">마이크를 켜면 목소리가 그려집니다</div>
+        <div id="live-hint" class="stage-hint">● 녹음을 누르면 시작합니다</div>
       </div>
 
       <!-- 레벨 미터: dBFS 표준 (0 dBFS = 클리핑 상한) -->
@@ -47,14 +55,6 @@
         </div>
       </div>
 
-      <div class="rec-row">
-        <div class="rec-time" id="rec-time">00:00.0</div>
-        <div class="rec-buttons">
-          <button id="rec-btn" class="btn-hero">● 녹음 시작</button>
-          <button id="stop-btn" class="btn-hero btn-ghost" disabled>■ 정지</button>
-        </div>
-      </div>
-
       <details class="opts">
         <summary>입력 설정</summary>
         <label class="opt"><input type="checkbox" id="opt-ns" checked> 잡음 줄이기</label>
@@ -63,7 +63,7 @@
         <div class="opt-note" id="fmt-note">녹음 형식 확인 중…</div>
       </details>
 
-      <div id="status" class="status" role="status" aria-live="polite">준비 완료. 이어폰으로 말해보세요.</div>
+      <div id="status" class="status" role="status" aria-live="polite">● 녹음</div>
     </section>
 
     <!-- ─────────── 편집 ─────────── -->
@@ -175,5 +175,7 @@
   <script src="script.js"></script>
 <script>window.LEGION_APP='aether-canvas';window.LEGION_ANALYTICS_URL='https://legion-analytics.hoyashi95.workers.dev';</script>
 <script src="legion-beacon.js"></script>
+  <script src="lung-surprise-eye.js"></script>
+  <p class="legion-dna-18" style="text-align:center;color:#8a8398;font-size:11px;margin-top:16px;line-height:1.5">픽션 엔터테인먼트 · 확률형 콘텐츠는 고지된 확률 기준 · 18+</p>
 </body>
 </html>
